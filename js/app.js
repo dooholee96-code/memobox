@@ -1,6 +1,6 @@
 import * as db from './db.js';
 import {
-  PARA_LABEL, KIND_ICON, uid, normalize, derive, paraOf, searchMemos, backlinks, relatedMemos, tagCounts,
+  PARA_LABEL, uid, normalize, derive, paraOf, searchMemos, backlinks, relatedMemos, tagCounts,
   dday, daysLeft, sharedToMemo, renderMarkdown, escapeHtml, toggleTask, memoToMarkdown, uniqueNames,
   makeZip, markdownToMemo, mergeById, memoTitle, parseCapture, parseTags, isSearchLike, memoKind,
   previewText, pickResurface, dayLabel, entryOf,
@@ -87,8 +87,8 @@ function filterFields() {
 
 function placeName(memo) {
   const c = memo.collectionId && state.colls[memo.collectionId];
-  if (c) return `${c.kind === 'project' ? '🎯' : '🌱'} ${c.name}`;
-  return { inbox: '📥 받은함', resource: '📚 자료', archive: '🗄 보관', project: '🎯', area: '🌱' }[paraOf(memo, state.colls)];
+  if (c) return c.name;
+  return { inbox: '받은함', resource: '자료', archive: '보관', project: '', area: '' }[paraOf(memo, state.colls)];
 }
 
 // ── 입력칸: 적기 + 찾기 ──
@@ -125,7 +125,7 @@ async function saveOmni() {
   const m = await createMemo(fields);
   state.fresh = m.id;
   renderAll();
-  toast(`저장했어요 → ${placeName(m)}`, { label: '편집', fn: () => openEditor(m.id) });
+  toast(`${placeName(m)}에 저장했어요`, { label: '편집', fn: () => openEditor(m.id) });
 }
 
 function clearOmni() {
@@ -154,8 +154,8 @@ function renderHint() {
   if (!t) hint = isTouch ? '' : 'Enter 저장 · Shift+Enter 줄바꿈';
   else if (cap) {
     const c = cap.collectionId && state.colls[cap.collectionId];
-    const where = c ? `${c.kind === 'project' ? '🎯' : '🌱'} ${c.name}` : placeName({ ...filterFields(), para: filterFields().para || 'inbox' });
-    hint = `→ ${where}${cap.pinned ? ' · 📌' : ''}`;
+    const where = c ? c.name : placeName({ ...filterFields(), para: filterFields().para || 'inbox' });
+    hint = `${where}에 저장${cap.pinned ? ' · 고정' : ''}`;
   } else hint = '찾는 중';
   $('#omniHint').textContent = hint;
 }
@@ -178,7 +178,7 @@ function renderBanner() {
   const days = state.lastBackup ? Math.floor((Date.now() - state.lastBackup) / DAY) : null;
   const need = live >= 5 && (days === null || days >= 7);
   $('#banner').innerHTML = need
-    ? `<div class="banner">💾 ${days === null ? '아직 백업한 적이 없어요.' : `마지막 백업 ${days}일 전.`}
+    ? `<div class="banner">${days === null ? '아직 백업한 적이 없어요.' : `마지막 백업 ${days}일 전.`}
         <button class="link-btn" data-backup>지금 백업</button></div>`
     : '';
 }
@@ -190,7 +190,7 @@ function renderPins() {
   const el = $('#pins');
   el.hidden = !pins.length || searching();
   el.innerHTML = pins.map(({ memo, d }) =>
-    `<button class="pin" data-pin-copy="${memo.id}" title="눌러서 복사">${KIND_ICON[memoKind(memo)]} ${esc(d.title)}</button>`).join('');
+    `<button class="pin" data-pin-copy="${memo.id}" title="눌러서 복사">${esc(d.title)}</button>`).join('');
 }
 
 // 오늘 할 것: 다가오는 마감, 받은함 정리, 다시 보기
@@ -206,13 +206,13 @@ function renderToday() {
     }
   }
   const inbox = items.filter((it) => paraOf(it.memo, state.colls) === 'inbox').length;
-  if (inbox >= 3) rows.push(`<button class="today-row" data-triage><span>📥 받은함 ${inbox}개 정리하기</span><b>→</b></button>`);
+  if (inbox >= 3) rows.push(`<button class="today-row" data-triage><span>받은함 ${inbox}개 정리하기</span></button>`);
   const re = pickResurface(items, Date.now(), state.resurfaceSkip);
   if (re) {
     const p = previewText(re.memo.body, 90);
     rows.push(`<div class="today-row resurface"><button class="link-like" data-show="${re.memo.id}">
-        <span>🔁 다시 보기 · <b>${esc(re.d.title)}</b></span>${p ? `<small>${esc(p)}</small>` : ''}</button>
-        <button class="mini" data-next-resurface aria-label="다른 메모">↻</button></div>`);
+        <span>다시 보기 · <b>${esc(re.d.title)}</b></span>${p ? `<small>${esc(p)}</small>` : ''}</button>
+        <button class="mini" data-next-resurface>다른 것</button></div>`);
   }
   el.innerHTML = rows.length ? `<div class="today">${rows.join('')}</div>` : '';
 }
@@ -237,13 +237,13 @@ function renderChips() {
   const trash = state.memos.filter((m) => m.deletedAt).length;
   $('#chips').innerHTML = [
     chip('전체', 'all'),
-    chip('📥 받은함', 'inbox', undefined, counts.inbox),
-    ...projects.map((c) => chip(`🎯 ${esc(c.name)}`, 'coll', c.id, 0, c.deadline ? ` <small class="${(daysLeft(c.deadline) ?? 99) <= 2 ? 'warn' : ''}">${dday(c.deadline)}</small>` : '')),
-    ...areas.map((c) => chip(`🌱 ${esc(c.name)}`, 'coll', c.id, byColl[c.id])),
-    chip('📚 자료', 'resource', undefined, counts.resource),
-    chip('🗄 보관', 'archive'),
-    trash ? chip('🗑', 'trash', undefined, trash) : '',
-    '<button class="chip add" data-new-coll aria-label="프로젝트·영역 만들기">＋</button>',
+    chip('받은함', 'inbox', undefined, counts.inbox),
+    ...projects.map((c) => chip(esc(c.name), 'coll', c.id, 0, c.deadline ? ` <small class="${(daysLeft(c.deadline) ?? 99) <= 2 ? 'warn' : ''}">${dday(c.deadline)}</small>` : '')),
+    ...areas.map((c) => chip(esc(c.name), 'coll', c.id, byColl[c.id])),
+    chip('자료', 'resource', undefined, counts.resource),
+    chip('보관', 'archive'),
+    trash ? chip('휴지통', 'trash', undefined, trash) : '',
+    '<button class="chip add" data-new-coll >+ 방 만들기</button>',
   ].join('');
 }
 
@@ -255,7 +255,7 @@ function renderViewHead() {
     const area = c.areaId && state.colls[c.areaId];
     const projects = c.kind === 'area' ? activeColls().filter((p) => p.kind === 'project' && p.areaId === c.id) : [];
     el.innerHTML = `
-      <div class="vh-title">${c.kind === 'project' ? '🎯 프로젝트' : '🌱 영역'} · ${esc(c.name)}
+      <div class="vh-title">${c.kind === 'project' ? '프로젝트' : '영역'} · ${esc(c.name)}
         ${c.deadline ? `<span class="muted small">${c.deadline} (${dday(c.deadline)})</span>` : ''}
         ${c.archived ? '<span class="badge b-archive">끝남</span>' : ''}</div>
       ${area ? `<div class="muted small">영역: <button class="link-btn" data-filter="coll" data-id="${area.id}">${esc(area.name)}</button></div>` : ''}
@@ -263,7 +263,7 @@ function renderViewHead() {
       ${c.note ? `<div class="vh-note">${esc(c.note)}</div>` : ''}
       <div class="vh-actions">
         <button class="chip-btn" data-edit-coll="${c.id}">수정</button>
-        ${c.kind === 'project' ? `<button class="chip-btn" data-archive-coll="${c.id}">${c.archived ? '되살리기' : '✅ 끝냄'}</button>` : ''}
+        ${c.kind === 'project' ? `<button class="chip-btn" data-archive-coll="${c.id}">${c.archived ? '되살리기' : '끝냄'}</button>` : ''}
         <button class="chip-btn danger" data-del-coll="${c.id}">삭제</button>
       </div>`;
   } else if (f.type === 'archive') {
@@ -286,13 +286,6 @@ function inFilter(memo) {
     case 'coll': return memo.collectionId === f.id;
     default: return p === f.type;
   }
-}
-
-function fmtTime(ts) {
-  const d = new Date(ts);
-  const now = new Date();
-  if (d.toDateString() === now.toDateString()) return d.toTimeString().slice(0, 5);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
 function hostOf(url) {
@@ -332,7 +325,7 @@ function byRecent(items) {
 function emptyText() {
   if (searching()) return '찾는 메모가 없어요.';
   switch (state.filter.type) {
-    case 'inbox': return '받은함이 비었어요. 🎉';
+    case 'inbox': return '받은함이 비었어요.';
     case 'trash': return '휴지통이 비었어요.';
     case 'archive': return '끝난 프로젝트와 보관한 메모가 여기에 모여요.';
     case 'coll': return `위 칸에 적으면 여기로 들어가요.`;
@@ -342,7 +335,6 @@ function emptyText() {
 
 function card({ memo, d }) {
   const open = state.expanded === memo.id;
-  const kind = memoKind(memo);
   const p = paraOf(memo, state.colls);
   // 받은함은 기본 자리라 따로 표시하지 않음
   const showPlace = p !== 'inbox' && !(state.filter.type === 'coll' && memo.collectionId === state.filter.id) && state.filter.type !== p;
@@ -351,15 +343,13 @@ function card({ memo, d }) {
   const cls = `card${open ? ' open' : ''}${memo.id === state.fresh ? ' fresh' : ''}`;
   return `<article class="${cls}" data-id="${memo.id}">
     <div class="card-head" data-toggle="${memo.id}" role="button" tabindex="0" aria-expanded="${open}">
-      <span class="kind" aria-hidden="true">${KIND_ICON[kind]}</span>
       <div class="card-main">
-        <div class="card-title">${memo.pinned ? '📌 ' : ''}${esc(d.title)}</div>
+        <div class="card-title">${esc(d.title)}${memo.pinned ? ' <span class="pin-mark">고정</span>' : ''}</div>
         ${!open && snip ? `<div class="card-snip">${esc(snip)}</div>` : ''}
         <div class="card-meta">
           ${showPlace ? `<span class="badge b-${p}">${esc(placeName(memo))}</span>` : ''}
           ${d.tags.slice(0, 4).map((t) => `<span class="t">#${esc(t)}</span>`).join('')}
           ${memo.sourceUrl ? `<span class="host">${esc(hostOf(memo.sourceUrl))}</span>` : ''}
-          <span class="time">${fmtTime(memo.updatedAt)}</span>
         </div>
       </div>
       ${trash ? `<button class="card-btn" data-restore="${memo.id}">되살리기</button>`
@@ -378,14 +368,14 @@ function cardBody(memo, d) {
   const html = renderMarkdown(rest || memo.body, { hasTitle: (t) => titleMap().has(normalize(t)) });
   return `<div class="card-body">
       <div class="md">${html}</div>
-      ${memo.sourceUrl ? `<a class="source" href="${esc(memo.sourceUrl)}" target="_blank" rel="noopener">🔗 ${esc(memo.sourceUrl)}</a>` : ''}
+      ${memo.sourceUrl ? `<a class="source" href="${esc(memo.sourceUrl)}" target="_blank" rel="noopener">출처 ${esc(memo.sourceUrl)}</a>` : ''}
       ${connections(memo, d)}
       <div class="card-actions">
-        <button class="act" data-edit="${memo.id}">✏️ 편집</button>
-        <button class="act" data-move="${memo.id}">🗂 옮기기</button>
-        <button class="act${memo.pinned ? ' on' : ''}" data-pin="${memo.id}">📌 ${memo.pinned ? '고정 풀기' : '고정'}</button>
-        <button class="act" data-share="${memo.id}">↗ 보내기</button>
-        <button class="act danger" data-delete="${memo.id}">🗑</button>
+        <button class="act" data-edit="${memo.id}">편집</button>
+        <button class="act" data-move="${memo.id}">옮기기</button>
+        <button class="act${memo.pinned ? ' on' : ''}" data-pin="${memo.id}">${memo.pinned ? '고정 풀기' : '고정'}</button>
+        <button class="act" data-share="${memo.id}">보내기</button>
+        <button class="act danger" data-delete="${memo.id}">삭제</button>
       </div>
     </div>`;
 }
@@ -395,11 +385,11 @@ function connections(memo, d) {
   const self = { memo, d };
   const back = backlinks(items, self);
   const related = relatedMemos(items, self, 4).filter((r) => !back.some((b) => b.memo.id === r.memo.id));
-  const li = (it) => `<button class="conn-item" data-show="${it.memo.id}">${KIND_ICON[memoKind(it.memo)]} ${esc(it.d.title)}</button>`;
+  const li = (it) => `<button class="conn-item" data-show="${it.memo.id}">${esc(it.d.title)}</button>`;
   if (!back.length && !related.length) return '';
   return `<div class="conn">
-    ${back.length ? `<div><span class="muted small">↩ 이 메모를 가리키는 메모</span>${back.map(li).join('')}</div>` : ''}
-    ${related.length ? `<div><span class="muted small">🏷 태그가 겹치는 메모</span>${related.map(li).join('')}</div>` : ''}
+    ${back.length ? `<div><span class="muted small">이 메모를 가리키는 메모</span>${back.map(li).join('')}</div>` : ''}
+    ${related.length ? `<div><span class="muted small">태그가 겹치는 메모</span>${related.map(li).join('')}</div>` : ''}
   </div>`;
 }
 
@@ -525,16 +515,16 @@ function renderEditor() {
   const d = dOf(m);
   $('#editor').innerHTML = `
     <div class="ed-top">
-      <button class="chip-btn" data-done>← 완료</button>
-      <button class="chip-btn place" data-move="${m.id}">${esc(placeName(m))} ▾</button>
+      <button class="chip-btn" data-done>완료</button>
+      <button class="chip-btn place" data-move="${m.id}">위치: ${esc(placeName(m))}</button>
       <span class="spacer"></span>
-      <button class="icon-btn" data-image aria-label="이미지 넣기">🖼</button>
-      <button class="icon-btn${m.pinned ? ' on' : ''}" data-pin="${m.id}" aria-label="고정">📌</button>
-      <button class="icon-btn danger" data-delete="${m.id}" aria-label="휴지통">🗑</button>
+      <button class="chip-btn" data-image>이미지</button>
+      <button class="chip-btn${m.pinned ? ' on' : ''}" data-pin="${m.id}">${m.pinned ? '고정 풀기' : '고정'}</button>
+      <button class="chip-btn danger" data-delete="${m.id}">삭제</button>
     </div>
     <textarea id="body" class="ed-body" placeholder="첫 줄은 제목&#10;&#10;#태그  [[다른 메모]]  - [ ] 할 일  ==형광펜==">${esc(m.body)}</textarea>
     <div id="suggest" class="suggest" hidden></div>
-    <label class="ed-source"><span>🔗</span><input id="source" type="url" placeholder="출처 링크 (있으면)" value="${esc(m.sourceUrl || '')}" inputmode="url"></label>
+    <label class="ed-source"><span>출처</span><input id="source" type="url" placeholder="출처 링크 (있으면)" value="${esc(m.sourceUrl || '')}" inputmode="url"></label>
     <div id="edConn">${connections(m, d)}</div>
     <div class="muted small ed-foot">만든 날 ${new Date(m.createdAt).toLocaleString('ko-KR')}</div>`;
   growBody();
@@ -646,7 +636,7 @@ async function copyMemo(memo, withOpen = false, text = copyText(memo)) {
     memo.useCount = (memo.useCount || 0) + 1;
     memo.usedAt = Date.now();
     saveMemo(memo, false);
-    const actions = [{ label: '🔎 검색', fn: () => webSearch(text) }];
+    const actions = [{ label: '검색', fn: () => webSearch(text) }];
     if (withOpen) actions.push({ label: '열기', fn: () => (state.palaceOn ? openEditor(memo.id) : showMemo(memo.id)) });
     toast(`‘${text.length > 16 ? text.slice(0, 16) + '…' : text}’ 복사했어요`, actions);
   } catch {
@@ -735,10 +725,10 @@ function placeButtons(memo) {
   const projects = activeColls().filter((c) => c.kind === 'project');
   const areas = activeColls().filter((c) => c.kind === 'area');
   return `
-    <div class="place-grid">${b('resource', '📚 자료')}${b('inbox', '📥 받은함')}${b('archive', '🗄 보관')}</div>
-    ${projects.length ? `<div class="muted small">🎯 프로젝트</div><div class="place-grid">${projects.map((c) => b('c:' + c.id, esc(c.name))).join('')}</div>` : ''}
-    ${areas.length ? `<div class="muted small">🌱 영역</div><div class="place-grid">${areas.map((c) => b('c:' + c.id, esc(c.name))).join('')}</div>` : ''}
-    <button class="link-btn small" data-new-coll>＋ 프로젝트·영역 만들기</button>`;
+    <div class="place-grid">${b('resource', '자료')}${b('inbox', '받은함')}${b('archive', '보관')}</div>
+    ${projects.length ? `<div class="muted small">프로젝트</div><div class="place-grid">${projects.map((c) => b('c:' + c.id, esc(c.name))).join('')}</div>` : ''}
+    ${areas.length ? `<div class="muted small">영역</div><div class="place-grid">${areas.map((c) => b('c:' + c.id, esc(c.name))).join('')}</div>` : ''}
+    <button class="link-btn small" data-new-coll>+ 프로젝트·영역 만들기</button>`;
 }
 
 function openSheet(html, bind, onClose) {
@@ -773,19 +763,19 @@ function openTriage() {
   const show = () => {
     const memo = findMemo(queue[i]);
     if (!memo) {
-      openSheet(`<h2>정리 끝 🎉</h2><p>${done}개를 옮겼어요.</p><div class="dlg-actions"><button class="primary-btn" data-close>닫기</button></div>`,
+      openSheet(`<h2>정리 끝</h2><p>${done}개를 옮겼어요.</p><div class="dlg-actions"><button class="primary-btn" data-close>닫기</button></div>`,
         (s) => { s.onclick = (e) => { if (e.target.closest('[data-close]')) closeLayer(); }; });
       return;
     }
     openSheet(`
       <div class="triage-top"><h2>받은함 정리</h2><span class="muted small">${i + 1} / ${queue.length}</span></div>
       <div class="triage-card md">${renderMarkdown(memo.body)}</div>
-      ${memo.sourceUrl ? `<div class="muted small host">🔗 ${esc(hostOf(memo.sourceUrl))}</div>` : ''}
+      ${memo.sourceUrl ? `<div class="muted small host">출처 ${esc(hostOf(memo.sourceUrl))}</div>` : ''}
       <input id="triageTags" class="field" placeholder="#태그 더하기 (선택)" autocomplete="off">
       ${placeButtons(memo)}
       <div class="dlg-actions">
-        <button class="chip-btn danger" data-trash>🗑 버리기</button>
-        <button class="chip-btn" data-edit-now>✏️ 편집</button>
+        <button class="chip-btn danger" data-trash>버리기</button>
+        <button class="chip-btn" data-edit-now>편집</button>
         <button class="chip-btn" data-skip>나중에 →</button>
       </div>`, (s) => {
       fillImages(s.querySelector('.triage-card'));
@@ -835,8 +825,8 @@ function searchFor(text) {
 
 function newCollSheet() {
   openSheet(`<h2>무엇을 만들까요?</h2>
-    <button class="big-choice" data-kind="project"><b>🎯 프로젝트</b><span>끝나는 날이 있는 일 · 예) 2027 임용 2차, 이사</span></button>
-    <button class="big-choice" data-kind="area"><b>🌱 영역</b><span>끝없이 계속 챙기는 분야 · 예) 수업, 건강, 돈</span></button>`, (s) => {
+    <button class="big-choice" data-kind="project"><b>프로젝트</b><span>끝나는 날이 있는 일 · 예) 2027 임용 2차, 이사</span></button>
+    <button class="big-choice" data-kind="area"><b>영역</b><span>끝없이 계속 챙기는 분야 · 예) 수업, 건강, 돈</span></button>`, (s) => {
     s.onclick = (e) => {
       const b = e.target.closest('[data-kind]');
       if (b) editColl(b.dataset.kind);
@@ -850,7 +840,7 @@ function editColl(kind, existing) {
   const areas = activeColls().filter((a) => a.kind === 'area');
   openSheet(`
     <form class="form">
-      <h2>${existing ? '고치기' : '새'} ${isProject ? '🎯 프로젝트' : '🌱 영역'}</h2>
+      <h2>${existing ? '고치기' : '새'} ${isProject ? '프로젝트' : '영역'}</h2>
       <label>이름<input class="field" name="name" required value="${esc(c.name)}" autocomplete="off"></label>
       ${isProject ? `
         <label>마감일<input class="field" name="deadline" type="date" value="${esc(c.deadline || '')}"></label>
@@ -1012,41 +1002,41 @@ async function openSettings() {
   const bookmarklet = `javascript:(()=>{const s=String(getSelection());window.open(${JSON.stringify(appUrl)}+'?title='+encodeURIComponent(document.title)+'&url='+encodeURIComponent(location.href)+'&text='+encodeURIComponent(s))})()`;
   const colls = Object.values(state.colls).sort((a, b) => (a.archived - b.archived) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, 'ko'));
   openSheet(`
-    <h2>⚙️ 설정·백업</h2>
+    <h2>메뉴</h2>
     <section>
-      <h3>✍️ 빠른 입력 요령</h3>
+      <h3>빠른 입력 요령</h3>
       <ul class="small tips">
         <li>위 칸 하나로 <b>적기와 찾기</b>를 같이 해요. 짧게 적으면 아래에 비슷한 메모가 바로 보여요.</li>
         <li><code>#태그</code> 태그 · <code>+이름</code> 그 프로젝트·영역으로 저장 · <code>!</code> 고정</li>
         <li>찾기: 낱말 여러 개 · <code>#태그</code> · <code>+프로젝트</code> · <code>-빼기</code> · 초성 <code>ㅁㅅ</code></li>
         <li>본문: <code>[[메모 제목]]</code> 잇기 · <code>==형광펜==</code> 은 목록에 먼저 보임 · <code>- [ ] 할 일</code></li>
-        <li>📌 고정한 메모는 맨 위 줄에 — 누르면 바로 복사 (둘째 줄부터, 링크는 주소)</li>
+        <li>고정한 메모는 맨 위 줄에 — 누르면 바로 복사 (둘째 줄부터, 링크는 주소)</li>
       </ul>
     </section>
     <section>
-      <h3>🎯 프로젝트 · 🌱 영역</h3>
+      <h3>방 (프로젝트 · 영역)</h3>
       <div class="coll-list">${colls.map((c) => `<button class="coll-row" data-edit-coll="${c.id}">
-        <span>${c.kind === 'project' ? '🎯' : '🌱'} ${esc(c.name)}${c.archived ? ' <small class="muted">(끝남)</small>' : ''}</span>
+        <span>${esc(c.name)} <small class="muted">${c.kind === 'project' ? '프로젝트' : '영역'}</small>${c.archived ? ' <small class="muted">(끝남)</small>' : ''}</span>
         <small class="muted">${c.deadline ? dday(c.deadline) : ''} 고치기</small></button>`).join('') || '<p class="muted small">아직 없어요.</p>'}</div>
-      <button class="chip-btn" data-new-coll>＋ 만들기</button>
+      <button class="chip-btn" data-new-coll>+ 만들기</button>
     </section>
     <section>
-      <h3>💾 백업</h3>
+      <h3>백업</h3>
       <p class="muted small">메모는 이 기기에만 있어요. ${state.lastBackup ? `마지막 백업: ${new Date(state.lastBackup).toLocaleString('ko-KR')}` : '아직 백업한 적이 없어요.'}</p>
       <div class="row"><button class="primary-btn" data-act="json">전체 백업 (JSON)</button>
       <button class="chip-btn" data-act="md">마크다운 ZIP (옵시디언용)</button></div>
       <p class="muted small">가져오기: 백업 JSON(같은 메모는 더 최근 것으로) 또는 .md 파일 여러 개.</p>
-      <button class="chip-btn" data-act="import">📥 파일 가져오기</button>
+      <button class="chip-btn" data-act="import">파일 가져오기</button>
     </section>
     <section>
-      <h3>🔗 다른 앱에서 바로 담기</h3>
-      <p class="small"><b>PC 크롬</b>: 이 버튼을 북마크바로 끌어다 놓기 → <a class="chip-btn" href="${esc(bookmarklet)}" onclick="return false">📎 메모함에 담기</a></p>
+      <h3>다른 앱에서 바로 담기</h3>
+      <p class="small"><b>PC 크롬</b>: 이 버튼을 북마크바로 끌어다 놓기 → <a class="chip-btn" href="${esc(bookmarklet)}" onclick="return false">메모함에 담기</a></p>
       <p class="small"><b>안드로이드</b>: 크롬 메뉴 → 앱 설치. 공유 메뉴에 ‘메모함’이 생겨요.</p>
       <p class="small"><b>아이폰</b>: 사파리 공유 → 홈 화면에 추가. 공유 메뉴용 단축어 주소: <code class="url">${esc(appUrl)}?text=</code></p>
     </section>
     <section>
-      <h3>📦 저장 공간</h3>
-      <p class="muted small">${est ? `${(est.usage / 1048576).toFixed(1)}MB 사용 중 · ` : ''}${persisted ? '✅ 브라우저가 지우지 않도록 보호됨' : '⚠️ 보호 안 됨 — 홈 화면에 설치하면 더 안전해요'}</p>
+      <h3>저장 공간</h3>
+      <p class="muted small">${est ? `${(est.usage / 1048576).toFixed(1)}MB 사용 중 · ` : ''}${persisted ? '브라우저가 지우지 않도록 보호됨' : '보호 안 됨 — 홈 화면에 설치하면 더 안전해요'}</p>
     </section>`, (s) => {
     s.onclick = (e) => {
       const b = e.target.closest('button');
@@ -1149,7 +1139,8 @@ function bind() {
     }
   };
   $('#menuBtn').onclick = openSettings;
-  $('#palaceBtn').onclick = () => setPalace(!state.palaceOn);
+  $('#palaceBtn').onclick = () => setPalace(true);
+  $('#listBtn').onclick = () => setPalace(false);
   addEventListener('resize', sizePalace);
   $('#tagsBtn').onclick = openTags;
 
@@ -1274,10 +1265,10 @@ function palaceRooms(items) {
   const colls = activeColls();
   const byName = (a, b) => a.name.localeCompare(b.name, 'ko');
   return [
-    { key: 'inbox', kind: 'inbox', label: '📥 입구' },
-    { key: 'resource', kind: 'resource', label: '📚 자료' },
-    ...colls.filter((c) => c.kind === 'area').sort(byName).map((c) => ({ key: c.id, kind: 'area', label: `🌱 ${esc(c.name)}` })),
-    ...colls.filter((c) => c.kind === 'project').sort(byName).map((c) => ({ key: c.id, kind: 'project', label: `🎯 ${esc(c.name)}${c.deadline ? ` <span class="dday">${dday(c.deadline)}</span>` : ''}` })),
+    { key: 'inbox', kind: 'inbox', label: '입구' },
+    { key: 'resource', kind: 'resource', label: '자료' },
+    ...colls.filter((c) => c.kind === 'area').sort(byName).map((c) => ({ key: c.id, kind: 'area', label: esc(c.name) })),
+    ...colls.filter((c) => c.kind === 'project').sort(byName).map((c) => ({ key: c.id, kind: 'project', label: `${esc(c.name)}${c.deadline ? ` <span class="dday">${dday(c.deadline)}</span>` : ''}` })),
   ].map((r) => ({ ...r, count: count[r.key] || 0 }));
 }
 
@@ -1351,6 +1342,7 @@ function setPalace(on) {
   document.body.classList.toggle('palace-on', on);
   $('#palace').hidden = !on;
   $('#palaceBtn').setAttribute('aria-pressed', String(on));
+  $('#listBtn').setAttribute('aria-pressed', String(!on));
   if (on) scrollTo({ top: 0 });
   renderAll();
 }

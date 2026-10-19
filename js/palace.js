@@ -75,9 +75,9 @@ export function createPalace(root, hooks) {
   root.innerHTML = `
     <div class="pal-view" tabindex="0" aria-label="궁전 보기"><div class="pal-canvas"></div></div>
     <div class="pal-tools">
-      <button class="icon-btn" data-pal="fit" aria-label="전체 보기">⤢</button>
-      <button class="icon-btn" data-pal="in" aria-label="확대">＋</button>
-      <button class="icon-btn" data-pal="out" aria-label="축소">－</button>
+      <button class="text-btn" data-pal="fit">전체</button>
+      <button class="text-btn" data-pal="in" aria-label="확대">+</button>
+      <button class="text-btn" data-pal="out" aria-label="축소">−</button>
     </div>`;
   const view = root.querySelector('.pal-view');
   const canvas = root.querySelector('.pal-canvas');

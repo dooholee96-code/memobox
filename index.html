@@ -19,19 +19,22 @@
   <div class="wrap">
     <header class="top">
       <div class="brand">메모함</div>
-      <button id="palaceBtn" class="icon-btn" aria-label="궁전 보기" aria-pressed="false">🏛</button>
-      <button id="tagsBtn" class="icon-btn" aria-label="태그 모아보기">#</button>
-      <button id="menuBtn" class="icon-btn" aria-label="설정·백업">⚙️</button>
+      <nav class="views" aria-label="보기">
+        <button id="listBtn" class="text-btn" type="button" aria-pressed="true">목록</button>
+        <button id="palaceBtn" class="text-btn" type="button" aria-pressed="false">궁전</button>
+        <button id="tagsBtn" class="text-btn" type="button">태그</button>
+      </nav>
+      <button id="menuBtn" class="menu-btn" type="button" aria-label="메뉴"><span></span><span></span><span></span></button>
     </header>
 
     <section class="omni">
       <textarea id="omni" rows="1" placeholder="키워드: 짧은 설명  ·  찾을 말" autocomplete="off" enterkeyhint="enter"></textarea>
       <div class="omni-row">
-        <button id="clipBtn" class="chip-btn" type="button" title="복사해 둔 것을 바로 저장">📋 클립보드 저장</button>
-        <button id="clearBtn" class="chip-btn" type="button" hidden>✕ 지우기</button>
+        <button id="clipBtn" class="text-btn" type="button">클립보드에서 저장</button>
+        <button id="clearBtn" class="text-btn" type="button" hidden>지우기</button>
         <span id="omniHint" class="muted small hint"></span>
-        <button id="bigBtn" class="chip-btn" type="button" title="큰 화면에서 쓰기" hidden>⤢</button>
-        <button id="saveBtn" class="primary-btn" type="button" disabled>저장</button>
+        <button id="bigBtn" class="text-btn" type="button" hidden>크게 쓰기</button>
+        <button id="saveBtn" class="text-btn strong" type="button" disabled>저장</button>
       </div>
     </section>
 

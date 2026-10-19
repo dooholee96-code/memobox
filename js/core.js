@@ -523,7 +523,6 @@ export function memoKind(memo) {
   return 'note';
 }
 
-export const KIND_ICON = { image: '🖼', task: '✅', link: '🔗', keyword: '🔑', snippet: '💬', note: '📝' };
 
 // 목록 미리보기: ==형광펜== 친 부분이 있으면 그것 먼저 (점진적 요약)
 export function previewText(body, max = 140) {
@@ -531,7 +530,7 @@ export function previewText(body, max = 140) {
   const e = entryOf(body);
   const rest = (body || '').replace(/^\s*\n/, '').split('\n').slice(1).join(' ');
   const src = marks.length ? marks.join(' · ') : e ? `${e.desc} ${rest}` : rest;
-  return src.replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼').replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, '$1')
+  return src.replace(/!\[[^\]]*\]\([^)]*\)/g, '(이미지)').replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, '$1')
     .replace(/[#>*`~=[\]]+/g, ' ').replace(/(^|\s)-\s/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
