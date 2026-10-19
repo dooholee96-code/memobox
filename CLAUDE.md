@@ -22,6 +22,7 @@
 - 메모의 `useCount`/`usedAt`(복사), `seenAt`(펼침)은 `updatedAt`을 바꾸지 않음. 고정 줄은 `usedAt` 순, 다시 보기는 `seenAt` 기준
 - 키워드 메모: `entryOf`가 첫 줄 `키워드: 설명`(콜론 앞 40자 이하, 글자 포함, 주소·시각 제외)을 알아봄. 제목·`[[링크]]`·복사는 키워드 기준, 종류 아이콘 🔑. 복사 뒤 알림에 🔎 검색(구글)
 - `js/palace.js` — 궁전 보기. 방 = 입구(inbox)·자료·영역·프로젝트, 방 칸은 `meta.palaceRooms`, 키워드 자리는 `memo.pos {room,x,y}`. 한 번 정한 자리는 다시 섞지 않음(장소법·Data Mountain 근거). 다른 방으로 옮겨진 메모만 새 방 빈 칸을 받음. 끌어서 방을 바꾸면 PARA 위치도 바뀜. 보던 화면(목록/궁전)은 localStorage `palaceOn`, 시점은 `palaceView`
+- `js/maze.js` — 미궁 보기(시험판, 화이트데이 마지막 미궁 스크린샷이 참고). 방 하나 = CSS 3D 정육면체, 네 벽에 키워드(저장 순서대로 앞→오른쪽→뒤→왼쪽 한 칸씩, `wallLayout`), 남는 면은 키워드 흐리게 반복. 외부 3D 엔진 없음. 크롬이 돌아간 벽에서 누른 곳을 못 찾아서 `kwAt`이 바라보는 쪽 벽 글자 영역으로 직접 찾음. 방 사이 걸어서 이동은 아직 없음(방 이름 글자로 전환). 보기 모드는 localStorage `viewMode`(list|palace|maze)
 - `sw.js` — 캐시 먼저 보여 주고 뒤에서 갱신. 앱 파일을 바꾸면 `CACHE` 버전을 올릴 것
 - PARA: 메모의 `collectionId`(프로젝트/영역) 우선, 없으면 `para`(inbox/resource). `archived` 메모나 보관된 프로젝트의 메모는 보관
 - 이미지: 1600px·webp(안 되면 jpeg)로 줄여 `images`에 저장, 본문엔 `![](img:ID)`
