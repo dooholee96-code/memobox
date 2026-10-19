@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>메모함</title>
+  <meta name="description" content="이 기기에 저장되는 개인용 메모·클립보드·세컨드브레인">
+  <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#18181b" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="메모함">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <aside id="side" class="side" aria-label="분류"></aside>
+    <div id="scrim" class="scrim"></div>
+
+    <main class="list-pane">
+      <header class="top">
+        <button id="menuBtn" class="icon-btn narrow-only" aria-label="메뉴">☰</button>
+        <input id="search" type="search" placeholder="검색 · #태그 · ㅁㅅ(초성)" autocomplete="off" enterkeyhint="search">
+      </header>
+
+      <div id="banner"></div>
+
+      <section class="capture">
+        <textarea id="quick" rows="2" placeholder="빠르게 적기 · 붙여넣기"></textarea>
+        <div class="capture-row">
+          <button id="pasteBtn" class="chip-btn" type="button">📋 붙여넣기</button>
+          <span id="captureTarget" class="muted small"></span>
+          <button id="saveQuickBtn" class="primary-btn" type="button">저장</button>
+        </div>
+      </section>
+
+      <div id="viewHead" class="view-head"></div>
+      <ul id="list" class="list"></ul>
+    </main>
+
+    <section id="editor" class="editor-pane" aria-label="메모"></section>
+  </div>
+
+  <dialog id="dlg"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <input id="imageInput" type="file" accept="image/*" hidden>
+  <input id="importInput" type="file" accept=".json,.md,.markdown,.txt,application/json,text/markdown,text/plain" multiple hidden>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
