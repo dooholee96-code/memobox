@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   memoTitle, parseTags, parseLinks, chosung, derive, paraOf, searchMemos, backlinks, relatedMemos,
   daysLeft, dday, sharedToMemo, renderMarkdown, toggleTask, memoToMarkdown, uniqueNames, makeZip,
-  markdownToMemo, mergeById, safeFileName,
+  markdownToMemo, mergeById, safeFileName, parseCapture, findCollection, isSearchLike, memoKind,
+  previewText, pickResurface, dayLabel,
 } from '../js/core.js';
 
 const memo = (id, body, extra = {}) => ({ id, body, updatedAt: 1, createdAt: 1, sourceUrl: '', ...extra });
@@ -12,6 +13,8 @@ const item = (m) => ({ memo: m, d: derive(m) });
 test('제목은 첫 줄, 앞의 #은 뗀다', () => {
   assert.equal(memoTitle('\n\n# 회의 메모\n내용'), '회의 메모');
   assert.equal(memoTitle(''), '(제목 없음)');
+  assert.equal(memoTitle('노트 쓰는 법 [[제텔카스텐]] ==핵심== #방법론'), '노트 쓰는 법 제텔카스텐 핵심');
+  assert.equal(memoTitle('#레시피 #한식'), '#레시피 #한식');
   assert.equal(memoTitle('가'.repeat(100)).length, 81);
 });
 
@@ -152,4 +155,71 @@ test('가져오기 병합은 더 최근 것', () => {
   assert.equal(r.added, 1);
   assert.equal(r.updated, 1);
   assert.equal(r.list.find((x) => x.id === 1).v, 'new');
+});
+
+const COLLS = {
+  p1: { id: 'p1', kind: 'project', name: '이사 준비' },
+  a1: { id: 'a1', kind: 'area', name: '수업' },
+  old: { id: 'old', kind: 'project', name: '이사 2024', archived: true },
+};
+
+test('빠른 입력: +이름은 프로젝트·영역, !는 고정, 나머지는 그대로', () => {
+  assert.deepEqual(parseCapture('박스 20개 +이사 !', COLLS), { body: '박스 20개', collectionId: 'p1', pinned: true });
+  assert.deepEqual(parseCapture('지도안 #임용 +수업', COLLS), { body: '지도안 #임용', collectionId: 'a1', pinned: false });
+  assert.deepEqual(parseCapture('a+b 1+1 +없음', COLLS), { body: 'a+b 1+1 +없음', collectionId: null, pinned: false });
+  assert.deepEqual(parseCapture('정말!', COLLS), { body: '정말!', collectionId: null, pinned: false });
+});
+
+test('컬렉션 찾기: 같은 이름 > 앞부분 > 포함, 띄어쓰기 무시', () => {
+  const list = Object.values(COLLS).filter((c) => !c.archived);
+  assert.equal(findCollection(list, '수업').id, 'a1');
+  assert.equal(findCollection(list, '이사').id, 'p1');
+  assert.equal(findCollection(list, '이사준비').id, 'p1');
+  assert.equal(findCollection(list, '준비').id, 'p1');
+  assert.equal(findCollection(list, '건강'), null);
+});
+
+test('검색: +프로젝트로 거르기', () => {
+  const items = [item(memo('a', '박스', { collectionId: 'p1' })), item(memo('b', '박스'))];
+  assert.deepEqual(searchMemos(items, '+이사', COLLS).map((h) => h.memo.id), ['a']);
+  assert.deepEqual(searchMemos(items, '박스 +이사준비', COLLS).map((h) => h.memo.id), ['a']);
+});
+
+test('찾기로 쓸 글인지', () => {
+  assert.equal(isSearchLike('계좌'), true);
+  assert.equal(isSearchLike('  '), false);
+  assert.equal(isSearchLike('첫 줄\n둘째 줄'), false);
+  assert.equal(isSearchLike('가'.repeat(41)), false);
+});
+
+test('메모 종류', () => {
+  assert.equal(memoKind(memo(1, '# 캡처\n![](img:a)')), 'image');
+  assert.equal(memoKind(memo(1, '장보기\n- [ ] 우유')), 'task');
+  assert.equal(memoKind(memo(1, '# 기사\n\nhttps://a.com', { sourceUrl: 'https://a.com' })), 'link');
+  assert.equal(memoKind(memo(1, '계좌번호\n국민 123')), 'snippet');
+  assert.equal(memoKind(memo(1, '# 긴 글\n하나\n둘\n셋')), 'note');
+});
+
+test('미리보기: 형광펜 먼저, 기호는 지움', () => {
+  assert.equal(previewText('# 제목\n긴 글 ==핵심 하나== 그리고 ==핵심 둘=='), '핵심 하나 · 핵심 둘');
+  assert.equal(previewText('# 제목\n- [[다른 메모|별칭]] **굵게** ![](img:a)'), '다른 메모 굵게 🖼');
+});
+
+test('다시 보기: 2주 넘은 것 중 하루 동안 같은 것', () => {
+  const now = Date.UTC(2026, 9, 19, 3);
+  const old = (id) => item(memo(id, id, { updatedAt: now - 30 * 86400000 }));
+  const items = [old('a'), old('b'), old('c'), item(memo('new', 'x', { updatedAt: now }))];
+  const pick = pickResurface(items, now);
+  assert.ok(['a', 'b', 'c'].includes(pick.memo.id));
+  assert.equal(pickResurface(items, now + 3600000).memo.id, pick.memo.id);
+  assert.notEqual(pickResurface(items, now, 1).memo.id, pick.memo.id);
+  assert.equal(pickResurface([items[3]], now), null);
+});
+
+test('날짜 묶음 이름', () => {
+  const now = new Date(2026, 9, 19, 10).getTime();
+  assert.equal(dayLabel(new Date(2026, 9, 19, 1).getTime(), now), '오늘');
+  assert.equal(dayLabel(new Date(2026, 9, 18, 23).getTime(), now), '어제');
+  assert.equal(dayLabel(new Date(2026, 9, 16).getTime(), now), '10월 16일 (금)');
+  assert.equal(dayLabel(new Date(2025, 2, 2).getTime(), now), '2025년 3월 2일');
 });

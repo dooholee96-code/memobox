@@ -22,7 +22,11 @@ export function normalize(s) {
 // 첫 줄(앞의 # 제거)이 제목. 비어 있으면 '(제목 없음)'
 export function memoTitle(body) {
   for (const line of (body || '').split('\n')) {
-    const t = line.replace(/^#{1,6}\s+/, '').trim();
+    let t = line.replace(/^#{1,6}\s+/, '')
+      .replace(/\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g, (_, a, b) => (b || a).trim())
+      .replace(/\*\*|==|~~/g, '').trim();
+    const noTags = t.replace(/(^|\s)#[\p{L}\p{N}_\-/]+/gu, '').trim();
+    if (noTags) t = noTags;
     if (t) return t.length > 80 ? t.slice(0, 80) + '…' : t;
   }
   return '(제목 없음)';
@@ -89,14 +93,15 @@ export function paraOf(memo, collections) {
 // 검색어: 띄어쓰기로 나눈 낱말 모두 포함(AND). '#태그'는 태그 조건, '-낱말'은 제외,
 // 자음만 쓴 낱말(ㅁㅅ)은 초성 검색
 export function parseQuery(q) {
-  const terms = [], tags = [], not = [];
+  const terms = [], tags = [], not = [], colls = [];
   for (const raw of normalize(q).split(/\s+/)) {
-    if (!raw) continue;
+    if (!raw || raw === '!') continue;
     if (raw.length > 1 && raw[0] === '#') tags.push(raw.slice(1));
+    else if (raw.length > 1 && raw[0] === '+') colls.push(raw.slice(1));
     else if (raw.length > 1 && raw[0] === '-') not.push(raw.slice(1));
     else terms.push(raw);
   }
-  return { terms, tags, not };
+  return { terms, tags, not, colls };
 }
 
 const CHO_ONLY = /^[ㄱ-ㅎ]+$/;
@@ -120,10 +125,15 @@ export function scoreMemo(d, q) {
 }
 
 // items: [{memo, d}] → 점수순(같으면 고정 먼저, 최근 수정 먼저)
-export function searchMemos(items, query) {
+export function searchMemos(items, query, collections = {}) {
   const q = parseQuery(query);
   const hits = [];
   for (const it of items) {
+    if (q.colls.length) {
+      const c = collections[it.memo.collectionId];
+      const name = c ? normalize(c.name).replace(/\s+/g, '') : '';
+      if (!name || !q.colls.every((x) => name.includes(x))) continue;
+    }
     const s = scoreMemo(it.d, q);
     if (s > 0) hits.push({ ...it, score: s });
   }
@@ -440,4 +450,85 @@ export function mergeById(current, incoming) {
     else if ((x.updatedAt || 0) > (old.updatedAt || 0)) { map.set(x.id, x); updated++; }
   }
   return { list: [...map.values()], added, updated };
+}
+
+// ── 빠른 입력 (한 칸으로 적기·찾기) ──
+
+// 저장할 때 쓰는 짧은 명령: '+이름' → 그 프로젝트·영역, '!' 단독 → 고정
+// collections: { id: {name, kind, archived} }
+export function parseCapture(text, collections = {}) {
+  let body = text;
+  let collectionId = null;
+  let pinned = false;
+  const active = Object.values(collections).filter((c) => !c.archived);
+  body = body.replace(/(^|\s)\+(\S+)/g, (all, pre, name) => {
+    if (collectionId) return all;
+    const c = findCollection(active, name);
+    if (!c) return all;
+    collectionId = c.id;
+    return pre;
+  });
+  body = body.replace(/(^|\s)!(?=\s|$)/g, () => { pinned = true; return ' '; });
+  body = body.replace(/[ \t]+$/gm, '').replace(/^[ \t]+/, '').trim();
+  return { body, collectionId, pinned };
+}
+
+// '+이사' 로 '이사 준비'도 찾음 (정확히 같은 이름 > 앞부분 일치 > 포함)
+export function findCollection(list, name) {
+  const n = normalize(name).replace(/_/g, ' ');
+  if (!n) return null;
+  const key = (c) => normalize(c.name);
+  return list.find((c) => key(c) === n)
+    || list.find((c) => key(c).startsWith(n))
+    || list.find((c) => key(c).replace(/\s+/g, '').includes(n.replace(/\s+/g, '')))
+    || null;
+}
+
+// 입력칸 글이 '찾기'로 쓸 만한지: 한 줄이고 짧을 때만 아래 목록을 거름
+export function isSearchLike(text) {
+  const t = text.trim();
+  return t !== '' && !t.includes('\n') && t.length <= 40;
+}
+
+// 메모 종류(아이콘용): 이미지 > 할 일 > 링크 > 문구 > 메모
+export function memoKind(memo) {
+  const body = memo.body || '';
+  if (/!\[[^\]]*\]\([^)]+\)/.test(body)) return 'image';
+  if (/^\s*[-*+]\s+\[[ xX]\]\s/m.test(body)) return 'task';
+  const lines = body.split('\n').filter((l) => l.trim());
+  if (memo.sourceUrl && lines.length <= 3) return 'link';
+  if (lines.length <= 2 && body.length <= 160 && !/^#{1,6}\s/.test(body)) return 'snippet';
+  return 'note';
+}
+
+export const KIND_ICON = { image: '🖼', task: '✅', link: '🔗', snippet: '💬', note: '📝' };
+
+// 목록 미리보기: ==형광펜== 친 부분이 있으면 그것 먼저 (점진적 요약)
+export function previewText(body, max = 140) {
+  const marks = [...stripCode(body).matchAll(/==([^=\n]+)==/g)].map((m) => m[1].trim());
+  const src = marks.length ? marks.join(' · ') : (body || '').split('\n').slice(1).join(' ');
+  return src.replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼').replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, '$1')
+    .replace(/[#>*`~=[\]]+/g, ' ').replace(/(^|\s)-\s/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+// 오늘 다시 볼 메모: 2주 넘게 안 본 메모 중 날짜로 정해지는 하나 (하루 동안 같은 것)
+export function pickResurface(items, now = Date.now(), skip = 0) {
+  const old = items.filter((it) => now - (it.memo.seenAt || it.memo.updatedAt) > 14 * DAY && !it.memo.archived)
+    .sort((a, b) => (a.memo.id < b.memo.id ? -1 : 1));
+  if (!old.length) return null;
+  const day = Math.floor(now / DAY);
+  return old[(day * 7919 + skip) % old.length];
+}
+
+// 하루 단위 묶음 이름: 오늘 / 어제 / 10월 17일 (금) / 2025년 3월 2일
+export function dayLabel(ts, now = Date.now()) {
+  const d = new Date(ts);
+  const t = new Date(now);
+  const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((start(t) - start(d)) / DAY);
+  if (diff === 0) return '오늘';
+  if (diff === 1) return '어제';
+  const w = '일월화수목금토'[d.getDay()];
+  if (d.getFullYear() === t.getFullYear()) return `${d.getMonth() + 1}월 ${d.getDate()}일 (${w})`;
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
