@@ -803,19 +803,6 @@ function openTriage() {
   show();
 }
 
-function openTags() {
-  const tags = tagCounts(liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive'));
-  openSheet(`<h2># 태그</h2>
-    ${tags.length ? `<div class="tag-cloud">${tags.map(([t, n]) => `<button class="tag-chip" data-tag="${esc(t)}">#${esc(t)} <small>${n}</small></button>`).join('')}</div>`
-      : '<p class="muted">본문에 #태그 를 쓰면 여기에 모여요.</p>'}`, (s) => {
-    s.onclick = (e) => {
-      const b = e.target.closest('[data-tag]');
-      if (!b) return;
-      closeLayer(() => searchFor('#' + b.dataset.tag));
-    };
-  });
-}
-
 function searchFor(text) {
   const ta = $('#omni');
   ta.value = text;
@@ -1005,8 +992,16 @@ async function openSettings() {
   const appUrl = location.origin + location.pathname;
   const bookmarklet = `javascript:(()=>{const s=String(getSelection());window.open(${JSON.stringify(appUrl)}+'?title='+encodeURIComponent(document.title)+'&url='+encodeURIComponent(location.href)+'&text='+encodeURIComponent(s))})()`;
   const colls = Object.values(state.colls).sort((a, b) => (a.archived - b.archived) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, 'ko'));
+  const tags = tagCounts(liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive'));
+  const modes = [['list', '목록'], ['palace', '궁전'], ['maze', '미궁']];
   openSheet(`
-    <h2>메뉴</h2>
+    <nav class="menu-views">${modes.map(([m, label]) =>
+      `<button class="menu-view" data-mode="${m}" aria-pressed="${state.mode === m}">${label}</button>`).join('')}</nav>
+    <section>
+      <h3>태그</h3>
+      ${tags.length ? `<div class="tag-cloud">${tags.slice(0, 40).map(([t, n]) => `<button class="tag-chip" data-tag="${esc(t)}">#${esc(t)} <small>${n}</small></button>`).join('')}</div>`
+        : '<p class="muted small">본문에 #태그 를 쓰면 여기에 모여요.</p>'}
+    </section>
     <section>
       <h3>빠른 입력 요령</h3>
       <ul class="small tips">
@@ -1046,7 +1041,9 @@ async function openSettings() {
       const b = e.target.closest('button');
       if (!b) return;
       const act = b.dataset.act;
-      if (act === 'json') exportJson();
+      if (b.dataset.mode) closeLayer(() => setMode(b.dataset.mode));
+      else if (b.dataset.tag) closeLayer(() => { if (state.mode !== 'list') setMode('list'); searchFor('#' + b.dataset.tag); });
+      else if (act === 'json') exportJson();
       else if (act === 'md') exportMarkdown();
       else if (act === 'import') $('#importInput').click();
       else if (b.dataset.editColl) editColl(null, state.colls[b.dataset.editColl]);
@@ -1143,12 +1140,8 @@ function bind() {
       toast('칸을 길게 눌러 붙여넣은 뒤 저장해 주세요');
     }
   };
-  $('#menuBtn').onclick = openSettings;
-  $('#listBtn').onclick = () => setMode('list');
-  $('#palaceBtn').onclick = () => setMode('palace');
-  $('#mazeBtn').onclick = () => setMode('maze');
+  $('#fab').onclick = openSettings;
   addEventListener('resize', sizeCanvas);
-  $('#tagsBtn').onclick = openTags;
 
   document.querySelector('.wrap').addEventListener('click', async (e) => {
     const t = e.target;
@@ -1349,9 +1342,6 @@ function setMode(mode) {
   document.body.classList.toggle('canvas-on', mode !== 'list');
   $('#palace').hidden = mode !== 'palace';
   $('#maze').hidden = mode !== 'maze';
-  for (const [id, m] of [['#listBtn', 'list'], ['#palaceBtn', 'palace'], ['#mazeBtn', 'maze']]) {
-    $(id).setAttribute('aria-pressed', String(mode === m));
-  }
   if (mode !== 'list') scrollTo({ top: 0 });
   renderAll();
 }

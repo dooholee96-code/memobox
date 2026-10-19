@@ -66,23 +66,26 @@ button:disabled { color: var(--faint) !important; cursor: default; text-decorati
 .strong, .primary-btn { font-weight: 700; }
 .on, [aria-pressed="true"] { font-weight: 700; text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 2px; }
 
-/* 유일한 그림 버튼: 메뉴 */
-.menu-btn {
-  border: 0; background: none; width: 40px; height: 40px; padding: 13px 9px; margin-right: -9px; cursor: pointer;
-  display: inline-flex; flex-direction: column; justify-content: space-between;
+/* 유일한 그림 버튼: 떠 있는 메뉴 (보기 바꾸기 · 태그 · 설정·백업) */
+.fab {
+  position: fixed; z-index: 40; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom));
+  width: 52px; height: 52px; border: 0; border-radius: 50%; padding: 18px 16px; cursor: pointer;
+  background: var(--text); display: flex; flex-direction: column; justify-content: space-between;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg) 35%, transparent);
 }
-.menu-btn span { display: block; height: 1.5px; background: var(--text); }
+.fab span { display: block; height: 1.5px; background: var(--bg); }
+.menu-views { display: flex; gap: 0 22px; padding-bottom: 6px; }
+.menu-view {
+  border: 0; background: none; padding: 0; cursor: pointer; font: inherit; color: var(--muted);
+  font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; min-height: 44px;
+}
+.menu-view[aria-pressed="true"] { color: var(--text); text-decoration: none; }
+.menu-view:hover { text-decoration: underline; text-underline-offset: 6px; }
 
 /* ── 뼈대 ── */
-.wrap { max-width: 680px; margin: 0 auto; padding: 0 20px calc(56px + env(safe-area-inset-bottom)); }
-.top { display: flex; align-items: center; gap: 18px; padding: max(14px, env(safe-area-inset-top)) 0 6px; }
-.brand { font-weight: 800; letter-spacing: -0.02em; flex: 1; }
-.views { display: flex; gap: 14px; font-size: 0.95rem; }
-.views .text-btn { color: var(--muted); }
-.views [aria-pressed="true"] { color: var(--text); }
-
+.wrap { max-width: 680px; margin: 0 auto; padding: 0 20px calc(96px + env(safe-area-inset-bottom)); }
 /* 입력칸: 밑줄 하나 */
-.omni { position: sticky; top: 0; z-index: 10; margin: 0 -20px; padding: 8px 20px 6px; background: var(--bg); }
+.omni { position: sticky; top: 0; z-index: 10; margin: 0 -20px; padding: max(14px, env(safe-area-inset-top)) 20px 6px; background: var(--bg); }
 .omni textarea {
   display: block; width: 100%; border: 0; border-bottom: 1.5px solid var(--text); background: none; border-radius: 0;
   padding: 10px 0 8px; resize: none; outline: none; font-size: 1.3rem; line-height: 1.45; min-height: 48px; font-weight: 500;
@@ -235,7 +238,7 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
 .coll-row { justify-content: space-between; width: 100%; gap: 8px; min-height: 38px; }
 
 .toast {
-  position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom)); transform: translate(-50%, 16px);
+  position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translate(-50%, 16px);
   background: var(--text); color: var(--bg); padding: 9px 16px; font-size: 0.92rem;
   opacity: 0; pointer-events: none; transition: 0.2s; z-index: 50; max-width: calc(100vw - 32px); width: max-content;
 }
@@ -274,7 +277,7 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
 .pal-canvas.searching .kw.hit { opacity: 1; }
 .pal-canvas.searching .kw.hit b { background: linear-gradient(transparent 55%, var(--mark) 55%); }
 .pal-tools {
-  position: absolute; right: 20px; bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; gap: 16px;
+  position: absolute; left: 20px; bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; gap: 16px;
   font-size: 0.92rem; color: var(--muted); background: var(--bg); padding: 2px 6px;
 }
 .pal-tools .text-btn { min-width: 20px; justify-content: center; }
@@ -310,7 +313,6 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
 @media (max-width: 640px) {
   .wrap { padding-left: 16px; padding-right: 16px; }
   .omni { margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
-  .top { gap: 14px; }
   .editor { width: 100vw; height: 100dvh; margin: 0; padding: 0 18px calc(24px + env(safe-area-inset-bottom)); }
   .sheet { margin: auto 0 0; width: 100vw; }
 }

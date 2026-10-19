@@ -17,17 +17,6 @@
 </head>
 <body>
   <div class="wrap">
-    <header class="top">
-      <div class="brand">메모함</div>
-      <nav class="views" aria-label="보기">
-        <button id="listBtn" class="text-btn" type="button" aria-pressed="true">목록</button>
-        <button id="palaceBtn" class="text-btn" type="button" aria-pressed="false">궁전</button>
-        <button id="mazeBtn" class="text-btn" type="button" aria-pressed="false">미궁</button>
-        <button id="tagsBtn" class="text-btn" type="button">태그</button>
-      </nav>
-      <button id="menuBtn" class="menu-btn" type="button" aria-label="메뉴"><span></span><span></span><span></span></button>
-    </header>
-
     <section class="omni">
       <textarea id="omni" rows="1" placeholder="키워드: 짧은 설명  ·  찾을 말" autocomplete="off" enterkeyhint="enter"></textarea>
       <div class="omni-row">
@@ -48,6 +37,8 @@
     <section id="palace" class="palace" hidden></section>
     <section id="maze" class="maze" hidden></section>
   </div>
+
+  <button id="fab" class="fab" type="button" aria-label="메뉴: 보기 바꾸기 · 태그 · 설정·백업"><span></span><span></span><span></span></button>
 
   <dialog id="editor" class="editor"></dialog>
   <dialog id="sheet" class="sheet"></dialog>
