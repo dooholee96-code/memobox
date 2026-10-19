@@ -276,10 +276,56 @@ dialog::backdrop { background: rgb(0 0 0 / 35%); }
 .toast {
   position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px);
   background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 0.92rem;
-  opacity: 0; pointer-events: none; transition: 0.2s; z-index: 50; max-width: calc(100vw - 32px); white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: 0.2s; z-index: 50; max-width: calc(100vw - 32px); width: max-content; text-align: center;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .toast .link-btn { color: var(--bg); font-weight: 700; text-decoration: underline; margin-left: 10px; }
+
+/* ── 궁전 보기 ── */
+.palace-on { overflow: hidden; }
+.palace-on #banner, .palace-on #pins, .palace-on #today, .palace-on #chips, .palace-on #viewHead, .palace-on #stream { display: none; }
+.palace-on .wrap { padding-bottom: 0; }
+#palaceBtn[aria-pressed="true"] { background: var(--accent-soft); }
+.palace {
+  position: relative; width: 100vw; margin-left: calc(50% - 50vw); overflow: hidden;
+  background: radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 / 28px 28px;
+  border-top: 1px solid var(--line);
+}
+.pal-view { position: absolute; inset: 0; touch-action: none; cursor: grab; outline: none; }
+.pal-view:active { cursor: grabbing; }
+.pal-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.pal-canvas.anim { transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.room {
+  position: absolute; border: 1.5px solid var(--line); border-radius: 28px; background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+.room-inbox { border-style: dashed; }
+.room-area { background: color-mix(in srgb, var(--b-area) 45%, transparent); }
+.room-project { background: color-mix(in srgb, var(--b-project) 45%, transparent); }
+.room-resource { background: color-mix(in srgb, var(--b-resource) 45%, transparent); }
+.room.drop { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.room-name { margin: 0; padding: 18px 22px; font-size: 26px; font-weight: 800; pointer-events: none; }
+.room-name small { font-size: 16px; color: var(--muted); font-weight: 600; }
+.room-name .dday { font-size: 16px; color: var(--warn); }
+.kw {
+  position: absolute; max-width: 168px; display: flex; flex-direction: column; align-items: flex-start; gap: 0;
+  border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 5px 10px; text-align: left;
+  box-shadow: var(--shadow); touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.kw b { font-size: 15px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kw small { font-size: 11px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kw.strong b { color: var(--accent); }
+.kw.pinned { border-color: var(--accent); }
+.kw:hover { border-color: var(--muted); }
+.kw.dragging { z-index: 5; transform: scale(1.08); box-shadow: 0 8px 24px rgb(0 0 0 / 18%); cursor: grabbing; }
+.pal-canvas.far .kw small { display: none; }
+.pal-canvas.very-far .kw:not(.strong):not(.pinned):not(.hit) { opacity: 0.25; }
+.pal-canvas.very-far .room-name { font-size: 56px; }
+.pal-canvas.searching .kw { opacity: 0.25; }
+.pal-canvas.searching .kw.hit { opacity: 1; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pal-tools {
+  position: absolute; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 6px;
+}
+.pal-tools .icon-btn { background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
 
 /* 폰: 편집은 화면 전체, 시트는 아래에 붙음 */
 @media (max-width: 640px) {

@@ -19,12 +19,13 @@
   <div class="wrap">
     <header class="top">
       <div class="brand">메모함</div>
+      <button id="palaceBtn" class="icon-btn" aria-label="궁전 보기" aria-pressed="false">🏛</button>
       <button id="tagsBtn" class="icon-btn" aria-label="태그 모아보기">#</button>
       <button id="menuBtn" class="icon-btn" aria-label="설정·백업">⚙️</button>
     </header>
 
     <section class="omni">
-      <textarea id="omni" rows="1" placeholder="적거나 찾기" autocomplete="off" enterkeyhint="enter"></textarea>
+      <textarea id="omni" rows="1" placeholder="키워드: 짧은 설명  ·  찾을 말" autocomplete="off" enterkeyhint="enter"></textarea>
       <div class="omni-row">
         <button id="clipBtn" class="chip-btn" type="button" title="복사해 둔 것을 바로 저장">📋 클립보드 저장</button>
         <button id="clearBtn" class="chip-btn" type="button" hidden>✕ 지우기</button>
@@ -40,6 +41,7 @@
     <nav id="chips" class="chips" aria-label="모아보기"></nav>
     <div id="viewHead" class="view-head"></div>
     <div id="stream" class="stream"></div>
+    <section id="palace" class="palace" hidden></section>
   </div>
 
   <dialog id="editor" class="editor"></dialog>

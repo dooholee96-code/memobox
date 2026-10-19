@@ -3,8 +3,9 @@ import {
   PARA_LABEL, KIND_ICON, uid, normalize, derive, paraOf, searchMemos, backlinks, relatedMemos, tagCounts,
   dday, daysLeft, sharedToMemo, renderMarkdown, escapeHtml, toggleTask, memoToMarkdown, uniqueNames,
   makeZip, markdownToMemo, mergeById, memoTitle, parseCapture, parseTags, isSearchLike, memoKind,
-  previewText, pickResurface, dayLabel,
+  previewText, pickResurface, dayLabel, entryOf,
 } from './core.js';
+import { createPalace, assignRooms, placeNew } from './palace.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = escapeHtml;
@@ -25,7 +26,16 @@ const state = {
   lastBackup: 0,
   persisted: false,
   resurfaceSkip: 0,
+  palaceOn: readPref('palaceOn') === '1',
+  roomCells: {},
 };
+
+function readPref(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function writePref(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* 저장 안 돼도 됨 */ }
+}
 
 // ── 메모 파생값 ──
 
@@ -153,6 +163,7 @@ function renderHint() {
 // ── 화면 그리기 ──
 
 function renderAll() {
+  if (state.palaceOn) { renderHint(); renderPalace(); return; }
   renderHint();
   renderBanner();
   renderPins();
@@ -362,7 +373,8 @@ function cardBody(memo, d) {
   // 제목(첫 줄)은 카드 머리에 이미 있으므로 둘째 줄부터. 한 줄 메모는 링크·태그를 누를 수 있게 그대로
   const lines = memo.body.split('\n');
   const firstText = lines.findIndex((l) => l.trim());
-  const rest = lines.slice(firstText + 1).join('\n').trim();
+  const e = entryOf(memo.body);
+  const rest = [e ? e.desc : '', lines.slice(firstText + 1).join('\n')].join('\n').trim();
   const html = renderMarkdown(rest || memo.body, { hasTitle: (t) => titleMap().has(normalize(t)) });
   return `<div class="card-body">
       <div class="md">${html}</div>
@@ -620,22 +632,31 @@ async function insertImage(file) {
 // ── 메모 동작 ──
 
 function copyText(memo) {
+  const e = entryOf(memo.body);
+  if (e) return e.keyword;
   if (memoKind(memo) === 'link' && memo.sourceUrl) return memo.sourceUrl;
   const lines = memo.body.split('\n');
   const rest = lines.slice(1).join('\n').trim();
   return rest || lines[0].replace(/^#{1,6}\s+/, '');
 }
 
-async function copyMemo(memo, withOpen = false) {
+async function copyMemo(memo, withOpen = false, text = copyText(memo)) {
   try {
-    await navigator.clipboard.writeText(copyText(memo));
+    await navigator.clipboard.writeText(text);
     memo.useCount = (memo.useCount || 0) + 1;
     memo.usedAt = Date.now();
     saveMemo(memo, false);
-    toast('복사했어요', withOpen ? { label: '열기', fn: () => showMemo(memo.id) } : null);
+    const actions = [{ label: '🔎 검색', fn: () => webSearch(text) }];
+    if (withOpen) actions.push({ label: '열기', fn: () => (state.palaceOn ? openEditor(memo.id) : showMemo(memo.id)) });
+    toast(`‘${text.length > 16 ? text.slice(0, 16) + '…' : text}’ 복사했어요`, actions);
   } catch {
     toast('복사하지 못했어요. 메모를 펼쳐 직접 선택해 주세요.');
   }
+}
+
+// 복사한 키워드를 바로 웹에서 찾기
+function webSearch(text) {
+  window.open('https://www.google.com/search?q=' + encodeURIComponent(text), '_blank', 'noopener');
 }
 
 async function togglePin(memo) {
@@ -1045,11 +1066,14 @@ async function openSettings() {
 let toastTimer;
 function toast(msg, action) {
   const el = $('#toast');
-  el.innerHTML = esc(msg) + (action ? ` <button class="link-btn">${esc(action.label)}</button>` : '');
-  if (action) el.querySelector('button').onclick = () => { el.classList.remove('show'); action.fn(); };
+  const actions = action ? [].concat(action) : [];
+  el.innerHTML = esc(msg) + actions.map((a, i) => ` <button class="link-btn" data-i="${i}">${esc(a.label)}</button>`).join('');
+  el.querySelectorAll('button').forEach((b) => {
+    b.onclick = () => { el.classList.remove('show'); actions[b.dataset.i].fn(); };
+  });
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), action ? 5000 : 2000);
+  toastTimer = setTimeout(() => el.classList.remove('show'), actions.length ? 5000 : 2000);
 }
 
 // ── 공유로 들어온 것: 편집 화면 없이 바로 저장 ──
@@ -1079,7 +1103,10 @@ function bind() {
     growOmni();
     renderHint();
     clearTimeout(t);
-    t = setTimeout(() => { state.limit = PAGE; renderPins(); renderToday(); renderStream(); }, 60);
+    t = setTimeout(() => {
+      if (state.palaceOn) return highlightPalace();
+      state.limit = PAGE; renderPins(); renderToday(); renderStream();
+    }, 60);
   });
   omni.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && (!isTouch || e.ctrlKey || e.metaKey)) { e.preventDefault(); saveOmni(); }
@@ -1122,6 +1149,8 @@ function bind() {
     }
   };
   $('#menuBtn').onclick = openSettings;
+  $('#palaceBtn').onclick = () => setPalace(!state.palaceOn);
+  addEventListener('resize', sizePalace);
   $('#tagsBtn').onclick = openTags;
 
   document.querySelector('.wrap').addEventListener('click', async (e) => {
@@ -1229,12 +1258,110 @@ function bind() {
   });
 }
 
+// ── 궁전 보기 ──
+
+let palace = null;
+
+function roomKeyOf(memo) {
+  const c = memo.collectionId && state.colls[memo.collectionId];
+  if (c && !c.archived) return c.id;
+  return memo.para === 'resource' ? 'resource' : 'inbox';
+}
+
+function palaceRooms(items) {
+  const count = {};
+  for (const it of items) count[it.room] = (count[it.room] || 0) + 1;
+  const colls = activeColls();
+  const byName = (a, b) => a.name.localeCompare(b.name, 'ko');
+  return [
+    { key: 'inbox', kind: 'inbox', label: '📥 입구' },
+    { key: 'resource', kind: 'resource', label: '📚 자료' },
+    ...colls.filter((c) => c.kind === 'area').sort(byName).map((c) => ({ key: c.id, kind: 'area', label: `🌱 ${esc(c.name)}` })),
+    ...colls.filter((c) => c.kind === 'project').sort(byName).map((c) => ({ key: c.id, kind: 'project', label: `🎯 ${esc(c.name)}${c.deadline ? ` <span class="dday">${dday(c.deadline)}</span>` : ''}` })),
+  ].map((r) => ({ ...r, count: count[r.key] || 0 }));
+}
+
+async function renderPalace() {
+  const el = $('#palace');
+  if (!palace) palace = createPalace(el, { onTap: palaceTap, onMove: palaceMove });
+  const items = liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive')
+    .map((it) => {
+      const e = entryOf(it.memo.body);
+      return {
+        id: it.memo.id, room: roomKeyOf(it.memo), keyword: it.d.title,
+        desc: e ? e.desc : previewText(it.memo.body, 40), strong: (it.memo.useCount || 0) >= 3, pinned: it.memo.pinned,
+      };
+    });
+  const rooms = palaceRooms(items);
+  // 방 자리: 한 번 정하면 그대로
+  const cells = assignRooms(rooms.map((r) => r.key), state.roomCells);
+  if (rooms.some((r) => !state.roomCells[r.key])) {
+    state.roomCells = { ...state.roomCells, ...cells };
+    db.setMeta('palaceRooms', state.roomCells);
+  }
+  // 키워드 자리: 처음 보는 것만 빈 칸에
+  const positions = Object.fromEntries(state.memos.filter((m) => m.pos).map((m) => [m.id, m.pos]));
+  const fresh = placeNew(items, positions);
+  const changed = [];
+  for (const [id, pos] of Object.entries(fresh)) {
+    const m = findMemo(id);
+    m.pos = pos;
+    positions[id] = pos;
+    changed.push(m);
+  }
+  if (changed.length) db.putMany('memos', changed);
+  sizePalace();
+  palace.render({ rooms, items, positions, roomCells: cells });
+  highlightPalace(false);
+}
+
+function sizePalace() {
+  const el = $('#palace');
+  if (!state.palaceOn || el.hidden) return;
+  el.style.height = Math.max(240, innerHeight - el.getBoundingClientRect().top) + 'px';
+}
+
+function highlightPalace(fly = true) {
+  if (!palace) return;
+  if (!searching()) return palace.highlight(null);
+  const items = liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive');
+  const ids = searchMemos(items, state.input, state.colls).map((h) => h.memo.id);
+  if (fly) palace.highlight(ids);
+}
+
+function palaceTap(id) {
+  const m = findMemo(id);
+  if (m) copyMemo(m, true);
+}
+
+async function palaceMove(id, roomKey, pos) {
+  const m = findMemo(id);
+  if (!m || !roomKey) return renderPalace();
+  const moved = roomKey !== roomKeyOf(m);
+  m.pos = pos;
+  if (moved) await moveMemo(m, roomKey === 'inbox' || roomKey === 'resource' ? roomKey : 'c:' + roomKey);
+  else await saveMemo(m, false);
+  renderPalace();
+  if (moved) toast(`${placeName(m)}(으)로 옮겼어요`);
+}
+
+function setPalace(on) {
+  state.palaceOn = on;
+  writePref('palaceOn', on ? '1' : '0');
+  document.body.classList.toggle('palace-on', on);
+  $('#palace').hidden = !on;
+  $('#palaceBtn').setAttribute('aria-pressed', String(on));
+  if (on) scrollTo({ top: 0 });
+  renderAll();
+}
+
 // ── 시작 ──
 
 async function start() {
   const [memos, colls] = await Promise.all([db.all('memos'), db.all('collections')]);
   state.colls = Object.fromEntries(colls.map((c) => [c.id, c]));
   state.lastBackup = await db.getMeta('lastBackup', 0);
+  state.roomCells = await db.getMeta('palaceRooms', {});
   state.persisted = await navigator.storage?.persisted?.().catch(() => false);
   state.memos = memos;
   const old = memos.filter((m) => m.deletedAt && Date.now() - m.deletedAt > TRASH_DAYS * DAY);
@@ -1243,7 +1370,7 @@ async function start() {
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 
   bind();
-  renderAll();
+  setPalace(state.palaceOn);
   if (!isTouch) $('#omni').focus();
   await takeShared();
 

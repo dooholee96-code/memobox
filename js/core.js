@@ -20,15 +20,36 @@ export function normalize(s) {
 }
 
 // 첫 줄(앞의 # 제거)이 제목. 비어 있으면 '(제목 없음)'
+function cleanLine(line) {
+  let t = line.replace(/^#{1,6}\s+/, '')
+    .replace(/\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g, (_, a, b) => (b || a).trim())
+    .replace(/\*\*|==|~~/g, '').trim();
+  const noTags = t.replace(/(^|\s)#[\p{L}\p{N}_\-/]+/gu, '').trim();
+  return noTags || t;
+}
+
+function firstLine(body) {
+  for (const line of (body || '').split('\n')) if (line.trim()) return line;
+  return '';
+}
+
+// '키워드: 짧은 설명' 꼴이면 { keyword, desc }. 주소(https://)나 시각(9:30)은 아님
+export function entryOf(body) {
+  const line = cleanLine(firstLine(body));
+  const m = line.match(/^(.{1,40}?)\s*[:：]\s*(.*)$/);
+  if (!m) return null;
+  const [, keyword, desc] = m;
+  if (desc.startsWith('//')) return null;
+  if (/\d$/.test(keyword) && /^\d/.test(desc)) return null;
+  if (!/\p{L}/u.test(keyword)) return null;
+  return { keyword: keyword.trim(), desc: desc.trim() };
+}
+
+// 제목 = 키워드(있으면) 또는 첫 줄
 export function memoTitle(body) {
-  for (const line of (body || '').split('\n')) {
-    let t = line.replace(/^#{1,6}\s+/, '')
-      .replace(/\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g, (_, a, b) => (b || a).trim())
-      .replace(/\*\*|==|~~/g, '').trim();
-    const noTags = t.replace(/(^|\s)#[\p{L}\p{N}_\-/]+/gu, '').trim();
-    if (noTags) t = noTags;
-    if (t) return t.length > 80 ? t.slice(0, 80) + '…' : t;
-  }
+  const e = entryOf(body);
+  const t = e ? e.keyword : cleanLine(firstLine(body));
+  if (t) return t.length > 80 ? t.slice(0, 80) + '…' : t;
   return '(제목 없음)';
 }
 
@@ -497,16 +518,19 @@ export function memoKind(memo) {
   if (/^\s*[-*+]\s+\[[ xX]\]\s/m.test(body)) return 'task';
   const lines = body.split('\n').filter((l) => l.trim());
   if (memo.sourceUrl && lines.length <= 3) return 'link';
+  if (entryOf(body) && lines.length <= 3) return 'keyword';
   if (lines.length <= 2 && body.length <= 160 && !/^#{1,6}\s/.test(body)) return 'snippet';
   return 'note';
 }
 
-export const KIND_ICON = { image: '🖼', task: '✅', link: '🔗', snippet: '💬', note: '📝' };
+export const KIND_ICON = { image: '🖼', task: '✅', link: '🔗', keyword: '🔑', snippet: '💬', note: '📝' };
 
 // 목록 미리보기: ==형광펜== 친 부분이 있으면 그것 먼저 (점진적 요약)
 export function previewText(body, max = 140) {
   const marks = [...stripCode(body).matchAll(/==([^=\n]+)==/g)].map((m) => m[1].trim());
-  const src = marks.length ? marks.join(' · ') : (body || '').split('\n').slice(1).join(' ');
+  const e = entryOf(body);
+  const rest = (body || '').replace(/^\s*\n/, '').split('\n').slice(1).join(' ');
+  const src = marks.length ? marks.join(' · ') : e ? `${e.desc} ${rest}` : rest;
   return src.replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼').replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, '$1')
     .replace(/[#>*`~=[\]]+/g, ' ').replace(/(^|\s)-\s/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }

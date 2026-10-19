@@ -4,7 +4,7 @@ import {
   memoTitle, parseTags, parseLinks, chosung, derive, paraOf, searchMemos, backlinks, relatedMemos,
   daysLeft, dday, sharedToMemo, renderMarkdown, toggleTask, memoToMarkdown, uniqueNames, makeZip,
   markdownToMemo, mergeById, safeFileName, parseCapture, findCollection, isSearchLike, memoKind,
-  previewText, pickResurface, dayLabel,
+  previewText, pickResurface, dayLabel, entryOf,
 } from '../js/core.js';
 
 const memo = (id, body, extra = {}) => ({ id, body, updatedAt: 1, createdAt: 1, sourceUrl: '', ...extra });
@@ -222,4 +222,28 @@ test('날짜 묶음 이름', () => {
   assert.equal(dayLabel(new Date(2026, 9, 18, 23).getTime(), now), '어제');
   assert.equal(dayLabel(new Date(2026, 9, 16).getTime(), now), '10월 16일 (금)');
   assert.equal(dayLabel(new Date(2025, 2, 2).getTime(), now), '2025년 3월 2일');
+});
+
+test('키워드: 설명 꼴 알아보기', () => {
+  assert.deepEqual(entryOf('PARA: 프로젝트·영역·자료·보관으로 나누는 정리법'), { keyword: 'PARA', desc: '프로젝트·영역·자료·보관으로 나누는 정리법' });
+  assert.deepEqual(entryOf('積読:사 놓고 안 읽은 책 #일본어'), { keyword: '積読', desc: '사 놓고 안 읽은 책' });
+  assert.deepEqual(entryOf('# 제텔카스텐 : 메모 상자'), { keyword: '제텔카스텐', desc: '메모 상자' });
+  assert.deepEqual(entryOf('\n장소법：기억을 장소에 붙이는 법'), { keyword: '장소법', desc: '기억을 장소에 붙이는 법' });
+  assert.equal(entryOf('https://a.com/x'), null);
+  assert.equal(entryOf('회의 9:30'), null);
+  assert.equal(entryOf('12:00'), null);
+  assert.equal(entryOf('그냥 한 줄 메모'), null);
+});
+
+test('키워드 메모: 제목·미리보기·종류', () => {
+  assert.equal(memoTitle('積読: 사 놓고 안 읽은 책'), '積読');
+  assert.equal(previewText('積読: 사 놓고 안 읽은 책\n예) 서재 가득'), '사 놓고 안 읽은 책 예) 서재 가득');
+  assert.equal(memoKind(memo(1, '積読: 사 놓고 안 읽은 책')), 'keyword');
+  assert.equal(memoKind(memo(1, '긴 글: 설명\n둘\n셋\n넷')), 'note');
+});
+
+test('키워드로 [[링크]]가 이어짐', () => {
+  const a = item(memo('a', '장소법: 기억을 장소에 붙이는 법'));
+  const b = item(memo('b', '기억의 궁전: [[장소법]]의 다른 이름'));
+  assert.deepEqual(backlinks([a, b], a).map((x) => x.memo.id), ['b']);
 });
