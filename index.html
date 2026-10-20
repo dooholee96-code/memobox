@@ -16,29 +16,38 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="wrap">
-    <section class="omni">
-      <textarea id="omni" rows="1" placeholder="키워드: 짧은 설명  ·  찾을 말" autocomplete="off" enterkeyhint="enter"></textarea>
-      <div class="omni-row">
-        <button id="clipBtn" class="text-btn" type="button">클립보드에서 저장</button>
-        <button id="clearBtn" class="text-btn" type="button" hidden>지우기</button>
-        <span id="omniHint" class="muted small hint"></span>
-        <button id="bigBtn" class="text-btn" type="button" hidden>크게 쓰기</button>
-        <button id="saveBtn" class="text-btn strong" type="button" disabled>저장</button>
-      </div>
-    </section>
+  <div id="panel" class="panel" hidden>
+    <div class="panel-in">
+      <section class="omni">
+        <textarea id="omni" rows="1" placeholder="키워드: 짧은 설명  ·  찾을 말" autocomplete="off" enterkeyhint="enter"></textarea>
+        <div class="omni-row">
+          <button id="clipBtn" class="text-btn" type="button">클립보드에서 저장</button>
+          <button id="clearBtn" class="text-btn" type="button" hidden>지우기</button>
+          <span id="omniHint" class="muted small hint"></span>
+          <button id="bigBtn" class="text-btn" type="button" hidden>크게 쓰기</button>
+          <button id="saveBtn" class="text-btn strong" type="button" disabled>저장</button>
+        </div>
+      </section>
+      <nav class="panel-nav" aria-label="보기">
+        <button class="text-btn" type="button" data-mode="list" aria-pressed="true">목록</button>
+        <button class="text-btn" type="button" data-mode="maze" aria-pressed="false">궁전</button>
+        <span class="spacer"></span>
+        <button id="moreBtn" class="text-btn" type="button">태그 · 설정</button>
+      </nav>
+    </div>
+  </div>
 
+  <div class="wrap">
     <div id="banner"></div>
     <div id="pins" class="pins"></div>
     <div id="today"></div>
     <nav id="chips" class="chips" aria-label="모아보기"></nav>
     <div id="viewHead" class="view-head"></div>
     <div id="stream" class="stream"></div>
-    <section id="palace" class="palace" hidden></section>
     <section id="maze" class="maze" hidden></section>
   </div>
 
-  <button id="fab" class="fab" type="button" aria-label="메뉴: 보기 바꾸기 · 태그 · 설정·백업"><span></span><span></span><span></span></button>
+  <button id="fab" class="fab" type="button" aria-label="메뉴: 적기·찾기 · 보기 바꾸기 · 태그 · 설정"><span></span><span></span><span></span></button>
 
   <dialog id="editor" class="editor"></dialog>
   <dialog id="sheet" class="sheet"></dialog>

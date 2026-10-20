@@ -83,9 +83,17 @@ button:disabled { color: var(--faint) !important; cursor: default; text-decorati
 .menu-view:hover { text-decoration: underline; text-underline-offset: 6px; }
 
 /* ── 뼈대 ── */
-.wrap { max-width: 680px; margin: 0 auto; padding: 0 20px calc(96px + env(safe-area-inset-bottom)); }
-/* 입력칸: 밑줄 하나 */
-.omni { position: sticky; top: 0; z-index: 10; margin: 0 -20px; padding: max(14px, env(safe-area-inset-top)) 20px 6px; background: var(--bg); }
+.wrap { max-width: 680px; margin: 0 auto; padding: max(14px, env(safe-area-inset-top)) 20px calc(96px + env(safe-area-inset-bottom)); }
+/* 입력칸: 떠 있는 버튼을 누르면 위에서 내려오는 판 */
+.panel { position: fixed; z-index: 30; top: 0; left: 0; right: 0; background: var(--bg); animation: drop 0.16s ease-out; }
+.panel-in { max-width: 680px; margin: 0 auto; padding: max(14px, env(safe-area-inset-top)) 20px 10px; }
+@keyframes drop { from { transform: translateY(-12px); opacity: 0; } }
+.panel-nav { display: flex; align-items: center; gap: 0 18px; margin-top: 6px; font-size: 0.95rem; }
+.panel-nav .text-btn { color: var(--muted); }
+.panel-nav [aria-pressed="true"] { color: var(--text); }
+.panel-nav .spacer { flex: 1; }
+.panel-open .wrap { padding-top: calc(var(--panel-h, 0px) + 8px); }
+.omni { padding: 0; }
 .omni textarea {
   display: block; width: 100%; border: 0; border-bottom: 1.5px solid var(--text); background: none; border-radius: 0;
   padding: 10px 0 8px; resize: none; outline: none; font-size: 1.3rem; line-height: 1.45; min-height: 48px; font-weight: 500;
@@ -245,46 +253,12 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
 .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .toast .link-btn { color: var(--bg); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; margin-left: 12px; min-height: 0; }
 
-/* ── 궁전: 글자만 떠 있는 큰 종이 ── */
 .canvas-on { overflow: hidden; }
 .canvas-on #banner, .canvas-on #pins, .canvas-on #today, .canvas-on #chips, .canvas-on #viewHead, .canvas-on #stream { display: none; }
-.canvas-on .wrap { padding-bottom: 0; }
-.palace { position: relative; width: 100vw; margin-left: calc(50% - 50vw); overflow: hidden; }
-.pal-view { position: absolute; inset: 0; touch-action: none; cursor: grab; outline: none; }
-.pal-view:active { cursor: grabbing; }
-.pal-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
-.pal-canvas.anim { transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1); }
-.room { position: absolute; transition: background 0.15s; }
-.room.drop { background: color-mix(in srgb, var(--mark) 45%, transparent); }
-.room-name { margin: 0; padding: 16px; font-size: 34px; font-weight: 800; letter-spacing: -0.02em; pointer-events: none; color: var(--faint); }
-.room-name small { font-size: 16px; font-weight: 500; margin-left: 4px; }
-.room-name .dday { font-size: 16px; color: var(--warn); font-weight: 600; }
-.kw {
-  position: absolute; max-width: 168px; display: flex; flex-direction: column; align-items: flex-start;
-  border: 0; background: none; padding: 2px 0; text-align: left; cursor: pointer;
-  touch-action: none; user-select: none; -webkit-user-select: none;
-}
-.kw b { font-size: 16px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kw small { font-size: 11px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kw.strong b { font-size: 19px; }
-.kw:hover b { text-decoration: underline; text-underline-offset: 3px; }
-.kw.dragging { z-index: 5; cursor: grabbing; }
-.kw.dragging b { background: var(--mark); }
-.pal-canvas.far .kw small { display: none; }
-.pal-canvas.very-far .kw:not(.strong):not(.pinned):not(.hit) { opacity: 0.3; }
-.pal-canvas.very-far .room-name { font-size: 64px; color: var(--muted); }
-.pal-canvas.searching .kw { opacity: 0.22; }
-.pal-canvas.searching .kw.hit { opacity: 1; }
-.pal-canvas.searching .kw.hit b { background: linear-gradient(transparent 55%, var(--mark) 55%); }
-.pal-tools {
-  position: absolute; left: 20px; bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; gap: 16px;
-  font-size: 0.92rem; color: var(--muted); background: var(--bg); padding: 2px 6px;
-}
-.pal-tools .text-btn { min-width: 20px; justify-content: center; }
 
-/* ── 미궁: 글자로 덮인 방 (어두운 무대) ── */
-.maze { position: relative; width: 100vw; margin-left: calc(50% - 50vw); overflow: hidden; background: #0b0b0a; color: #e9e6dd; user-select: none; -webkit-user-select: none; }
-.mz-rooms { position: absolute; z-index: 3; top: 0; left: 0; right: 0; display: flex; gap: 0 16px; overflow-x: auto; padding: 8px 20px; scrollbar-width: none; font-size: 0.9rem; }
+/* ── 궁전: 글자로 덮인 3D 방 (어두운 무대, 화면 전체) ── */
+.maze { position: fixed; inset: 0; overflow: hidden; background: #0b0b0a; color: #e9e6dd; user-select: none; -webkit-user-select: none; }
+.mz-rooms { position: absolute; z-index: 3; top: 0; left: 0; right: 0; display: flex; gap: 0 16px; overflow-x: auto; padding: max(12px, env(safe-area-inset-top)) 20px 8px; scrollbar-width: none; font-size: 0.9rem; }
 .mz-rooms::-webkit-scrollbar { display: none; }
 .mz-rooms .text-btn { color: #8d8a82; white-space: nowrap; flex: none; }
 .mz-rooms [aria-pressed="true"] { color: #f1eee6; }
@@ -312,7 +286,7 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
 /* 폰 */
 @media (max-width: 640px) {
   .wrap { padding-left: 16px; padding-right: 16px; }
-  .omni { margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
+  .panel-in { padding-left: 16px; padding-right: 16px; }
   .editor { width: 100vw; height: 100dvh; margin: 0; padding: 0 18px calc(24px + env(safe-area-inset-bottom)); }
   .sheet { margin: auto 0 0; width: 100vw; }
 }

@@ -5,7 +5,6 @@ import {
   makeZip, markdownToMemo, mergeById, memoTitle, parseCapture, parseTags, isSearchLike, memoKind,
   previewText, pickResurface, dayLabel, entryOf,
 } from './core.js';
-import { createPalace, assignRooms, placeNew } from './palace.js';
 import { createMaze } from './maze.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -27,10 +26,9 @@ const state = {
   lastBackup: 0,
   persisted: false,
   resurfaceSkip: 0,
-  // 목록 | 궁전 | 미궁 (예전 'palaceOn' 설정도 읽음)
-  mode: readPref('viewMode') || (readPref('palaceOn') === '1' ? 'palace' : 'list'),
+  // list(목록) | maze(궁전). 예전 설정 'palace'·'palaceOn'도 궁전으로
+  mode: ['palace', 'maze'].includes(readPref('viewMode')) || readPref('palaceOn') === '1' ? 'maze' : 'list',
   mazeRoom: 'inbox',
-  roomCells: {},
 };
 
 function readPref(key) {
@@ -113,11 +111,12 @@ async function saveOmni() {
   if (!text) return;
   const cap = captureFrom(text);
   if (!cap) { toast('찾기만 했어요. 내용을 함께 적으면 저장돼요'); return; }
-  // 저장이 끝나기 전에 다음 글을 적을 수 있으므로 칸은 바로 비움
+  // 저장이 끝나기 전에 다음 글을 적을 수 있으므로 칸은 바로 비우고, 입력칸도 닫음
   clearOmni();
+  closePanel();
   const same = liveItems().find((it) => it.memo.body.trim() === cap.body);
   if (same) {
-    showMemo(same.memo.id);
+    if (state.mode === 'list') showMemo(same.memo.id); else openEditor(same.memo.id);
     toast('이미 있는 메모예요');
     return;
   }
@@ -144,6 +143,7 @@ function growOmni() {
   const ta = $('#omni');
   ta.style.height = 'auto';
   ta.style.height = Math.min(ta.scrollHeight, innerHeight * 0.4) + 'px';
+  panelSpace();
 }
 
 function renderHint() {
@@ -166,7 +166,6 @@ function renderHint() {
 // ── 화면 그리기 ──
 
 function renderAll() {
-  if (state.mode === 'palace') { renderHint(); renderPalace(); return; }
   if (state.mode === 'maze') { renderHint(); renderMaze(); return; }
   renderHint();
   renderBanner();
@@ -332,8 +331,8 @@ function emptyText() {
     case 'inbox': return '받은함이 비었어요.';
     case 'trash': return '휴지통이 비었어요.';
     case 'archive': return '끝난 프로젝트와 보관한 메모가 여기에 모여요.';
-    case 'coll': return `위 칸에 적으면 여기로 들어가요.`;
-    default: return '위 칸에 아무거나 적고 저장해 보세요. 정리는 나중에 해도 돼요.';
+    case 'coll': return '보고 있는 동안 적은 키워드는 여기로 들어가요.';
+    default: return '오른쪽 아래 버튼을 눌러 적어 보세요. 정리는 나중에 해도 돼요.';
   }
 }
 
@@ -804,6 +803,7 @@ function openTriage() {
 }
 
 function searchFor(text) {
+  openPanel(false);
   const ta = $('#omni');
   ta.value = text;
   state.input = text;
@@ -993,7 +993,7 @@ async function openSettings() {
   const bookmarklet = `javascript:(()=>{const s=String(getSelection());window.open(${JSON.stringify(appUrl)}+'?title='+encodeURIComponent(document.title)+'&url='+encodeURIComponent(location.href)+'&text='+encodeURIComponent(s))})()`;
   const colls = Object.values(state.colls).sort((a, b) => (a.archived - b.archived) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, 'ko'));
   const tags = tagCounts(liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive'));
-  const modes = [['list', '목록'], ['palace', '궁전'], ['maze', '미궁']];
+  const modes = [['list', '목록'], ['maze', '궁전']];
   openSheet(`
     <nav class="menu-views">${modes.map(([m, label]) =>
       `<button class="menu-view" data-mode="${m}" aria-pressed="${state.mode === m}">${label}</button>`).join('')}</nav>
@@ -1073,7 +1073,7 @@ async function takeShared() {
   const p = new URLSearchParams(location.search);
   if (![...p.keys()].length) return;
   history.replaceState(null, '', location.pathname);
-  if (p.has('new')) { $('#omni').focus(); return; }
+  if (p.has('new')) { openPanel(); return; }
   if (!['title', 'text', 'url'].some((k) => p.get(k))) return;
   const shared = sharedToMemo({ title: p.get('title') || '', text: p.get('text') || '', url: p.get('url') || '' });
   const same = shared.sourceUrl && liveItems().find((it) => it.memo.sourceUrl === shared.sourceUrl);
@@ -1095,14 +1095,13 @@ function bind() {
     renderHint();
     clearTimeout(t);
     t = setTimeout(() => {
-      if (state.mode === 'palace') return highlightPalace();
       if (state.mode === 'maze') return highlightMaze();
       state.limit = PAGE; renderPins(); renderToday(); renderStream();
     }, 60);
   });
   omni.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && (!isTouch || e.ctrlKey || e.metaKey)) { e.preventDefault(); saveOmni(); }
-    else if (e.key === 'Escape') { clearOmni(); renderAll(); }
+    else if (e.key === 'Escape') closePanel();
     else if (e.key === 'ArrowDown' && searching()) { e.preventDefault(); document.querySelector('.card-head')?.focus(); }
   });
   omni.addEventListener('paste', async (e) => {
@@ -1140,8 +1139,14 @@ function bind() {
       toast('칸을 길게 눌러 붙여넣은 뒤 저장해 주세요');
     }
   };
-  $('#fab').onclick = openSettings;
-  addEventListener('resize', sizeCanvas);
+  $('#fab').onclick = () => ($('#panel').hidden ? openPanel() : closePanel());
+  $('#panel').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.mode) setMode(b.dataset.mode);
+    else if (b.id === 'moreBtn') openSettings();
+  });
+  addEventListener('resize', panelSpace);
 
   document.querySelector('.wrap').addEventListener('click', async (e) => {
     const t = e.target;
@@ -1242,15 +1247,12 @@ function bind() {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
     if ((e.key === '/' && !typing) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) {
       e.preventDefault();
-      $('#omni').focus();
-      $('#omni').select();
+      openPanel();
     }
   });
 }
 
-// ── 궁전 보기 ──
-
-let palace = null;
+// ── 방 (궁전에서 씀) ──
 
 function roomKeyOf(memo) {
   const c = memo.collectionId && state.colls[memo.collectionId];
@@ -1258,103 +1260,77 @@ function roomKeyOf(memo) {
   return memo.para === 'resource' ? 'resource' : 'inbox';
 }
 
-function palaceRooms(items) {
+function roomList(items) {
   const count = {};
   for (const it of items) count[it.room] = (count[it.room] || 0) + 1;
   const colls = activeColls();
   const byName = (a, b) => a.name.localeCompare(b.name, 'ko');
   return [
-    { key: 'inbox', kind: 'inbox', label: '입구' },
-    { key: 'resource', kind: 'resource', label: '자료' },
-    ...colls.filter((c) => c.kind === 'area').sort(byName).map((c) => ({ key: c.id, kind: 'area', label: esc(c.name) })),
-    ...colls.filter((c) => c.kind === 'project').sort(byName).map((c) => ({ key: c.id, kind: 'project', label: `${esc(c.name)}${c.deadline ? ` <span class="dday">${dday(c.deadline)}</span>` : ''}` })),
+    { key: 'inbox', label: '입구' },
+    { key: 'resource', label: '자료' },
+    ...colls.filter((c) => c.kind === 'area').sort(byName).map((c) => ({ key: c.id, label: esc(c.name) })),
+    ...colls.filter((c) => c.kind === 'project').sort(byName).map((c) => ({ key: c.id, label: esc(c.name) })),
   ].map((r) => ({ ...r, count: count[r.key] || 0 }));
 }
 
-async function renderPalace() {
-  const el = $('#palace');
-  if (!palace) palace = createPalace(el, { onTap: palaceTap, onMove: palaceMove });
-  const items = liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive')
-    .map((it) => {
-      const e = entryOf(it.memo.body);
-      return {
-        id: it.memo.id, room: roomKeyOf(it.memo), keyword: it.d.title,
-        desc: e ? e.desc : previewText(it.memo.body, 40), strong: (it.memo.useCount || 0) >= 3, pinned: it.memo.pinned,
-      };
-    });
-  const rooms = palaceRooms(items);
-  // 방 자리: 한 번 정하면 그대로
-  const cells = assignRooms(rooms.map((r) => r.key), state.roomCells);
-  if (rooms.some((r) => !state.roomCells[r.key])) {
-    state.roomCells = { ...state.roomCells, ...cells };
-    db.setMeta('palaceRooms', state.roomCells);
-  }
-  // 키워드 자리: 처음 보는 것만 빈 칸에
-  const positions = Object.fromEntries(state.memos.filter((m) => m.pos).map((m) => [m.id, m.pos]));
-  const fresh = placeNew(items, positions);
-  const changed = [];
-  for (const [id, pos] of Object.entries(fresh)) {
-    const m = findMemo(id);
-    m.pos = pos;
-    positions[id] = pos;
-    changed.push(m);
-  }
-  if (changed.length) db.putMany('memos', changed);
-  sizeCanvas();
-  palace.render({ rooms, items, positions, roomCells: cells });
-  highlightPalace(false);
-}
-
-// 궁전·미궁은 입력칸 아래 남은 화면을 다 씀
-function sizeCanvas() {
-  for (const el of [$('#palace'), $('#maze')]) {
-    if (!el.hidden) el.style.height = Math.max(240, innerHeight - el.getBoundingClientRect().top) + 'px';
-  }
-}
-
-function highlightPalace(fly = true) {
-  if (!palace) return;
-  if (!searching()) return palace.highlight(null);
-  const items = liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive');
-  const ids = searchMemos(items, state.input, state.colls).map((h) => h.memo.id);
-  if (fly) palace.highlight(ids);
-}
-
-function palaceTap(id) {
+function copyFromRoom(id) {
   const m = findMemo(id);
   if (m) copyMemo(m, true);
 }
 
-async function palaceMove(id, roomKey, pos) {
-  const m = findMemo(id);
-  if (!m || !roomKey) return renderPalace();
-  const moved = roomKey !== roomKeyOf(m);
-  m.pos = pos;
-  if (moved) await moveMemo(m, roomKey === 'inbox' || roomKey === 'resource' ? roomKey : 'c:' + roomKey);
-  else await saveMemo(m, false);
-  renderPalace();
-  if (moved) toast(`${placeName(m)}(으)로 옮겼어요`);
+// ── 입력칸 (떠 있는 버튼을 누르면 위에서 내려옴, 뒤로 가기로 닫힘) ──
+
+const panelLayer = {
+  get open() { return !$('#panel').hidden; },
+  showModal() {},
+  close() {
+    $('#panel').hidden = true;
+    document.body.classList.remove('panel-open');
+  },
+};
+
+function openPanel(focus = true) {
+  const panel = $('#panel');
+  if (panel.hidden) {
+    panel.hidden = false;
+    document.body.classList.add('panel-open');
+    openLayer(panelLayer, () => { clearOmni(); renderAll(); });
+    renderHint();
+    panelSpace();
+  }
+  // 누른 그 순간에 커서를 넣어야 폰 자판이 바로 올라옴
+  if (focus) $('#omni').focus();
+}
+
+function closePanel() {
+  if (!$('#panel').hidden && layers.at(-1)?.dlg === panelLayer) closeLayer();
+}
+
+// 입력칸이 덮는 만큼 목록을 내림
+function panelSpace() {
+  const panel = $('#panel');
+  document.body.style.setProperty('--panel-h', panel.hidden ? '0px' : panel.offsetHeight + 'px');
 }
 
 function setMode(mode) {
   state.mode = mode;
   writePref('viewMode', mode);
   document.body.classList.toggle('canvas-on', mode !== 'list');
-  $('#palace').hidden = mode !== 'palace';
   $('#maze').hidden = mode !== 'maze';
+  document.querySelectorAll('#panel [data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
   if (mode !== 'list') scrollTo({ top: 0 });
   renderAll();
 }
 
-// ── 미궁 보기 (시험판: 방 하나씩) ──
+// ── 궁전 (3D 미궁, 방 하나씩) ──
 
 let maze = null;
 
 function renderMaze() {
-  if (!maze) maze = createMaze($('#maze'), { onTap: palaceTap, onRoom: (key) => { state.mazeRoom = key; renderMaze(); } });
+  if (!maze) maze = createMaze($('#maze'), { onTap: copyFromRoom, onRoom: (key) => { state.mazeRoom = key; renderMaze(); } });
   const live = liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive');
   const all = live.map((it) => ({ id: it.memo.id, room: roomKeyOf(it.memo) }));
-  const rooms = palaceRooms(all).map(({ key, label, count }) => ({ key, label: `${label.replace(/\s*<[^>]+>.*$/, '')} ${count}` }));
+  const rooms = roomList(all).map(({ key, label, count }) => ({ key, label: `${label} ${count}` }));
   if (!rooms.some((r) => r.key === state.mazeRoom)) state.mazeRoom = 'inbox';
   // 벽 자리는 저장한 순서대로 (새 키워드는 뒤에 붙어서 있던 자리가 안 바뀜)
   const items = live.filter((it) => roomKeyOf(it.memo) === state.mazeRoom)
@@ -1363,7 +1339,6 @@ function renderMaze() {
       const e = entryOf(it.memo.body);
       return { id: it.memo.id, keyword: it.d.title, desc: e ? e.desc : previewText(it.memo.body, 30), strong: (it.memo.useCount || 0) >= 3 };
     });
-  sizeCanvas();
   maze.render({ rooms, room: state.mazeRoom, items });
   highlightMaze();
 }
@@ -1381,7 +1356,6 @@ async function start() {
   const [memos, colls] = await Promise.all([db.all('memos'), db.all('collections')]);
   state.colls = Object.fromEntries(colls.map((c) => [c.id, c]));
   state.lastBackup = await db.getMeta('lastBackup', 0);
-  state.roomCells = await db.getMeta('palaceRooms', {});
   state.persisted = await navigator.storage?.persisted?.().catch(() => false);
   state.memos = memos;
   const old = memos.filter((m) => m.deletedAt && Date.now() - m.deletedAt > TRASH_DAYS * DAY);
@@ -1391,7 +1365,6 @@ async function start() {
 
   bind();
   setMode(state.mode);
-  if (!isTouch) $('#omni').focus();
   await takeShared();
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
