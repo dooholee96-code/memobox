@@ -111,7 +111,7 @@ async function saveOmni() {
   if (!cap) { toast('찾기만 했어요. 내용을 함께 적으면 저장돼요'); return; }
   // 저장이 끝나기 전에 다음 글을 적을 수 있으므로 칸은 바로 비우고, 입력칸도 닫음
   clearOmni();
-  closePanel();
+  if (!isSmallWindow()) closePanel();
   const same = liveItems().find((it) => it.memo.body.trim() === cap.body);
   if (same) {
     openEditor(same.memo.id);
@@ -1024,10 +1024,14 @@ async function openSettings() {
       <button class="chip-btn" data-act="import">파일 가져오기</button>
     </section>
     <section>
-      <h3>다른 앱에서 바로 담기</h3>
-      <p class="small"><b>PC 크롬</b>: 이 버튼을 북마크바로 끌어다 놓기 → <a class="chip-btn" href="${esc(bookmarklet)}" onclick="return false">메모함에 담기</a></p>
-      <p class="small"><b>안드로이드</b>: 크롬 메뉴 → 앱 설치. 공유 메뉴에 ‘메모함’이 생겨요.</p>
-      <p class="small"><b>아이폰</b>: 사파리 공유 → 홈 화면에 추가. 공유 메뉴용 단축어 주소: <code class="url">${esc(appUrl)}?text=</code></p>
+      <h3>보고 있는 사이트 담기</h3>
+      <p class="small"><b>안드로이드 (크롬 · 삼성 인터넷)</b>: 브라우저 메뉴 → 앱 설치(홈 화면에 추가). 그다음 어느 사이트에서든 <b>공유 → 메모함</b>. 글을 드래그해서 공유하면 그 글이 저장돼요.</p>
+      <p class="small"><b>PC (크롬 · 엣지 · 사파리)</b>: 이 글자를 북마크바로 끌어다 놓기 → <a class="chip-btn" href="${esc(bookmarklet)}" onclick="return false">메모함에 담기</a>. 사이트에서 누르면 제목·주소(드래그한 글 포함)가 저장돼요.</p>
+      <p class="small"><b>아이폰 (사파리)</b>: 단축어 앱으로 공유 메뉴에 ‘메모함에 담기’를 만들어요 (README 참고). 단축어는 사파리로 열리므로, 아이폰에서는 이 앱을 홈 화면 아이콘이 아니라 <b>사파리에서</b> 쓰세요. 주소: <code class="url">${esc(appUrl)}?text=</code></p>
+      <h3>떠 있는 클립보드처럼 쓰기</h3>
+      <p class="small"><b>갤럭시</b>: 최근 앱 화면에서 메모함 아이콘 → <b>팝업 화면으로 열기</b>. 작은 창에서는 찾기·목록이 바로 떠요. ‘토끼’를 치면 うさぎ가 나오고, 누르면 복사.</p>
+      <p class="small"><b>그 밖의 폰</b>: 앱 아이콘을 꾹 → <b>찾기·적기</b>. 찾아서 복사하고 뒤로 가기.</p>
+      <p class="small"><b>PC</b>: 설치한 앱 창을 작게 옆에 두고, <kbd>Ctrl</kbd>+<kbd>K</kbd> 또는 <kbd>/</kbd> 로 바로 찾기.</p>
     </section>
     <section>
       <h3>저장 공간</h3>
@@ -1068,7 +1072,8 @@ async function takeShared() {
   const p = new URLSearchParams(location.search);
   if (![...p.keys()].length) return;
   history.replaceState(null, '', location.pathname);
-  if (p.has('new')) { openPanel(); return; }
+  // 아이콘을 꾹 눌러 '찾기·적기'로 열면 바로 입력칸 (예전 ?new도 같이)
+  if (p.has('find') || p.has('new')) { openPanel(); return; }
   if (!['title', 'text', 'url'].some((k) => p.get(k))) return;
   const shared = sharedToMemo({ title: p.get('title') || '', text: p.get('text') || '', url: p.get('url') || '' });
   const same = shared.sourceUrl && liveItems().find((it) => it.memo.sourceUrl === shared.sourceUrl);
@@ -1346,6 +1351,16 @@ async function moveOnMap(id, roomKey, pos) {
   if (moved) toast(`${placeName(m)}(으)로 옮겼어요`);
 }
 
+// 갤럭시 팝업 화면·화면 분할처럼 작은 창에서는 지도 대신 찾기·목록 판을 바로 보여 줌
+// (떠 있는 클립보드처럼 쓰기: 찾고 → 눌러 복사). 자판은 올리지 않음
+function isSmallWindow() {
+  return innerHeight < 620 && innerWidth < 600;
+}
+
+function fitSmallWindow() {
+  if (isSmallWindow() && $('#panel').hidden) openPanel(false);
+}
+
 // 목록에서 고른 메모를 지도에서 보여 줌
 function showOnMap(id) {
   closeLayer(() => palace?.highlight([id]));
@@ -1367,6 +1382,8 @@ async function start() {
 
   bind();
   renderAll();
+  fitSmallWindow();
+  addEventListener('resize', fitSmallWindow);
   await takeShared();
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});

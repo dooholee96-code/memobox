@@ -1,6 +1,6 @@
 // 앱 파일을 기기에 담아 두어 인터넷 없이도 열리게 한다.
 // 먼저 담아 둔 것을 보여 주고, 뒤에서 새 버전을 받아 다음에 열 때 쓴다.
-const CACHE = 'memobox-v8';
+const CACHE = 'memobox-v9';
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/app.js', 'js/core.js', 'js/db.js', 'js/palace.js',
