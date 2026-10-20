@@ -53,13 +53,13 @@ code { background: var(--code); padding: 0 3px; }
 :focus-visible { outline: 1px dashed var(--muted); outline-offset: 3px; }
 
 /* ── 모든 버튼은 글자 ── */
-.text-btn, .chip-btn, .primary-btn, .link-btn, .icon-btn, .mini, .chip, .card-btn, .act, .pin, .today-row, .link-like,
+.text-btn, .chip-btn, .primary-btn, .link-btn, .icon-btn, .chip, .card-btn, .act, .pin,
 .place-btn, .big-choice, .tag-chip, .conn-item, .coll-row, .suggest button, .more {
   border: 0; background: none; padding: 0; margin: 0; border-radius: 0; box-shadow: none;
   color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: none;
   min-height: 32px; display: inline-flex; align-items: center; gap: 4px;
 }
-:is(.text-btn, .chip-btn, .link-btn, .icon-btn, .mini, .chip, .card-btn, .act, .pin, .place-btn, .tag-chip, .conn-item, .suggest button):hover {
+:is(.text-btn, .chip-btn, .link-btn, .icon-btn, .chip, .card-btn, .act, .pin, .place-btn, .tag-chip, .conn-item, .suggest button):hover {
   text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px;
 }
 button:disabled { color: var(--faint) !important; cursor: default; text-decoration: none !important; }
@@ -107,15 +107,6 @@ button:disabled { color: var(--faint) !important; cursor: default; text-decorati
 .pins::before { content: "고정"; font-size: 0.75rem; color: var(--muted); letter-spacing: 0.08em; }
 .pin { font-weight: 600; min-height: 30px; }
 
-/* 오늘 */
-.today { display: flex; flex-direction: column; padding: 12px 0 0; }
-.today-row { justify-content: space-between; width: 100%; min-height: 34px; font-size: 0.95rem; }
-.today-row b { font-weight: 600; }
-.today-row:is(button):hover span { text-decoration: underline; text-underline-offset: 4px; }
-.today-row.resurface { gap: 12px; }
-.link-like { flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; gap: 0; padding: 4px 0; }
-.link-like small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.mini { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
 
 /* 모아보기: 글자 탭 */
 .chips { display: flex; gap: 6px 16px; overflow-x: auto; padding: 18px 0 4px; scrollbar-width: none; font-size: 0.95rem; }
@@ -169,8 +160,6 @@ button:disabled { color: var(--faint) !important; cursor: default; text-decorati
 .md > :first-child { margin-top: 0; }
 .md p { margin: 0.35em 0; }
 .md a { color: inherit; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--faint); }
-.md .wikilink { cursor: pointer; font-weight: 600; text-decoration-color: var(--text); }
-.md .wikilink.missing { color: var(--muted); text-decoration-style: dashed; }
 .md .tag { cursor: pointer; color: var(--muted); text-decoration: none; }
 .md pre { background: var(--code); padding: 12px; overflow-x: auto; }
 .md pre code { background: none; padding: 0; }
@@ -180,9 +169,6 @@ button:disabled { color: var(--faint) !important; cursor: default; text-decorati
 .md hr { border: 0; text-align: center; margin: 1em 0; }
 .md hr::after { content: "· · ·"; color: var(--muted); }
 .md ul, .md ol { padding-left: 1.2em; margin: 0.35em 0; }
-.md ul.tasks { list-style: none; padding-left: 0; }
-.md .task input { width: 16px; height: 16px; vertical-align: -2px; accent-color: var(--text); margin-right: 6px; }
-.md .task.done span { color: var(--muted); text-decoration: line-through; }
 
 /* ── 편집 화면 ── */
 dialog { color: var(--text); }
@@ -232,8 +218,6 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
 .big-choice b { font-size: 1.1rem; }
 .big-choice span { color: var(--muted); font-size: 0.88rem; }
 .big-choice:hover b { text-decoration: underline; text-underline-offset: 4px; }
-.triage-top { display: flex; justify-content: space-between; align-items: baseline; }
-.triage-card { max-height: 34dvh; overflow-y: auto; padding: 4px 0 8px; font-size: 1.05rem; }
 .tag-cloud { display: flex; flex-wrap: wrap; gap: 2px 16px; }
 .tag-chip { font-weight: 600; }
 .tag-chip small { color: var(--muted); font-weight: 400; }

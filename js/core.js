@@ -69,17 +69,6 @@ export function parseTags(body) {
   return [...out];
 }
 
-const LINK_RE = /\[\[([^[\]\n|]+)(?:\|[^\]\n]*)?\]\]/g;
-
-export function parseLinks(body) {
-  const out = new Set();
-  for (const m of stripCode(body).matchAll(LINK_RE)) {
-    const t = m[1].trim();
-    if (t) out.add(t);
-  }
-  return [...out];
-}
-
 const CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
 
 // '미술 교사' → 'ㅁㅅ ㄱㅅ'
@@ -96,9 +85,8 @@ export function chosung(s) {
 export function derive(memo) {
   const title = memoTitle(memo.body);
   const tags = parseTags(memo.body);
-  const links = parseLinks(memo.body);
   const hay = normalize([title, memo.body, memo.sourceUrl || ''].join('\n'));
-  return { title, tags, links, hay, cho: chosung(hay), key: normalize(title) };
+  return { title, tags, hay, cho: chosung(hay), key: normalize(title) };
 }
 
 // PARA 위치: 보관 > 컬렉션(프로젝트·영역) > 자료/받은함
@@ -166,11 +154,6 @@ export function searchMemos(items, query, collections = {}) {
   return hits;
 }
 
-export function backlinks(items, target) {
-  const key = target.d.key;
-  return items.filter((it) => it.memo.id !== target.memo.id && it.d.links.some((l) => normalize(l) === key));
-}
-
 // 태그가 많이 겹치는 메모
 export function relatedMemos(items, target, limit = 5) {
   const mine = new Set(target.d.tags.map(normalize));
@@ -189,22 +172,6 @@ export function tagCounts(items) {
   const m = new Map();
   for (const it of items) for (const t of it.d.tags) m.set(t, (m.get(t) || 0) + 1);
   return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'));
-}
-
-// 마감일(YYYY-MM-DD)까지 남은 날. 오늘이면 0
-export function daysLeft(deadline, now = Date.now()) {
-  if (!deadline) return null;
-  const [y, m, d] = deadline.split('-').map(Number);
-  const end = new Date(y, m - 1, d).getTime();
-  const t = new Date(now);
-  const today = new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
-  return Math.round((end - today) / DAY);
-}
-
-export function dday(deadline, now) {
-  const n = daysLeft(deadline, now);
-  if (n === null) return '';
-  return n === 0 ? 'D-day' : n > 0 ? `D-${n}` : `D+${-n}`;
 }
 
 // 공유로 받은 값 → 메모 본문. 안드로이드는 주소를 text에 넣어 보내기도 함
@@ -233,11 +200,7 @@ export function escapeHtml(s) {
 
 const SAFE_URL = /^(https?:\/\/|mailto:)/i;
 
-function unescapeHtml(s) {
-  return s.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" }[e]));
-}
-
-function inline(text, opt) {
+function inline(text) {
   const slots = [];
   const put = (html) => `\u0000${slots.push(html) - 1}\u0000`;
   let s = escapeHtml(text);
@@ -249,11 +212,8 @@ function inline(text, opt) {
   });
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (all, label, href) =>
     SAFE_URL.test(href) ? put(`<a href="${href}" target="_blank" rel="noopener">${label}</a>`) : all);
-  s = s.replace(/\[\[([^[\]|]+)(?:\|([^\]]*))?\]\]/g, (_, target, alias) => {
-    const t = target.trim();
-    const exists = opt.hasTitle ? opt.hasTitle(unescapeHtml(t)) : true;
-    return put(`<a class="wikilink${exists ? '' : ' missing'}" data-link="${t}">${(alias || t).trim()}</a>`);
-  });
+  // 예전에 적은 [[링크]]는 괄호 없이 글자로만 (링크 기능은 뺐음)
+  s = s.replace(/\[\[([^[\]|]+)(?:\|([^\]]*))?\]\]/g, (_, target, alias) => (alias || target).trim());
   s = s.replace(/https?:\/\/[^\s<\u0000]+[^\s<\u0000.,;:!?)'"]/g, (u) =>
     put(`<a href="${u}" target="_blank" rel="noopener">${u}</a>`));
   s = s.replace(/(^|[\s(,])#([\p{L}\p{N}_\-/]+)/gu, (all, pre, tag) =>
@@ -265,13 +225,13 @@ function inline(text, opt) {
   return s.replace(/\u0000(\d+)\u0000/g, (_, i) => slots[i]);
 }
 
-export function renderMarkdown(src, opt = {}) {
+export function renderMarkdown(src) {
   const lines = (src || '').split('\n');
   const out = [];
   let para = [];
-  let list = null; // 'ul' | 'tasks' | 'ol'
+  let list = null; // 'ul' | 'ol'
   const flushPara = () => {
-    if (para.length) out.push(`<p>${para.map((l) => inline(l, opt)).join('<br>')}</p>`);
+    if (para.length) out.push(`<p>${para.map((l) => inline(l)).join('<br>')}</p>`);
     para = [];
   };
   const closeList = () => {
@@ -291,26 +251,21 @@ export function renderMarkdown(src, opt = {}) {
     if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
       flushPara(); closeList();
       const n = m[1].length;
-      out.push(`<h${n}>${inline(m[2], opt)}</h${n}>`);
+      out.push(`<h${n}>${inline(m[2])}</h${n}>`);
     } else if (/^\s*(---|\*\*\*)\s*$/.test(line)) {
       flushPara(); closeList();
       out.push('<hr>');
-    } else if ((m = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/))) {
-      flushPara();
-      if (list !== 'tasks') { closeList(); out.push('<ul class="tasks">'); list = 'tasks'; }
-      const done = m[1] !== ' ';
-      out.push(`<li class="task${done ? ' done' : ''}"><input type="checkbox" data-line="${i}"${done ? ' checked' : ''}> <span>${inline(m[2], opt)}</span></li>`);
     } else if ((m = line.match(/^\s*[-*+]\s+(.*)$/))) {
       flushPara();
       if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
-      out.push(`<li>${inline(m[1], opt)}</li>`);
+      out.push(`<li>${inline(m[1])}</li>`);
     } else if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
       flushPara();
       if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
-      out.push(`<li>${inline(m[1], opt)}</li>`);
+      out.push(`<li>${inline(m[1])}</li>`);
     } else if ((m = line.match(/^>\s?(.*)$/))) {
       flushPara(); closeList();
-      out.push(`<blockquote>${inline(m[1], opt)}</blockquote>`);
+      out.push(`<blockquote>${inline(m[1])}</blockquote>`);
     } else if (!line.trim()) {
       flushPara(); closeList();
     } else {
@@ -320,15 +275,6 @@ export function renderMarkdown(src, opt = {}) {
   }
   flushPara(); closeList();
   return out.join('\n');
-}
-
-// 체크박스 줄(lineNo)의 [ ] ↔ [x]
-export function toggleTask(body, lineNo) {
-  const lines = body.split('\n');
-  const l = lines[lineNo];
-  if (l === undefined) return body;
-  lines[lineNo] = l.replace(/\[([ xX])\]/, (_, c) => (c === ' ' ? '[x]' : '[ ]'));
-  return lines.join('\n');
 }
 
 // ── 내보내기 ──
@@ -515,7 +461,6 @@ export function isSearchLike(text) {
 export function memoKind(memo) {
   const body = memo.body || '';
   if (/!\[[^\]]*\]\([^)]+\)/.test(body)) return 'image';
-  if (/^\s*[-*+]\s+\[[ xX]\]\s/m.test(body)) return 'task';
   const lines = body.split('\n').filter((l) => l.trim());
   if (memo.sourceUrl && lines.length <= 3) return 'link';
   if (entryOf(body) && lines.length <= 3) return 'keyword';
@@ -532,15 +477,6 @@ export function previewText(body, max = 140) {
   const src = marks.length ? marks.join(' · ') : e ? `${e.desc} ${rest}` : rest;
   return src.replace(/!\[[^\]]*\]\([^)]*\)/g, '(이미지)').replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, '$1')
     .replace(/[#>*`~=[\]]+/g, ' ').replace(/(^|\s)-\s/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
-}
-
-// 오늘 다시 볼 메모: 2주 넘게 안 본 메모 중 날짜로 정해지는 하나 (하루 동안 같은 것)
-export function pickResurface(items, now = Date.now(), skip = 0) {
-  const old = items.filter((it) => now - (it.memo.seenAt || it.memo.updatedAt) > 14 * DAY && !it.memo.archived)
-    .sort((a, b) => (a.memo.id < b.memo.id ? -1 : 1));
-  if (!old.length) return null;
-  const day = Math.floor(now / DAY);
-  return old[(day * 7919 + skip) % old.length];
 }
 
 // 하루 단위 묶음 이름: 오늘 / 어제 / 10월 17일 (금) / 2025년 3월 2일

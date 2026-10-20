@@ -1,9 +1,9 @@
 import * as db from './db.js';
 import {
-  PARA_LABEL, uid, normalize, derive, paraOf, searchMemos, backlinks, relatedMemos, tagCounts,
-  dday, daysLeft, sharedToMemo, renderMarkdown, escapeHtml, toggleTask, memoToMarkdown, uniqueNames,
+  PARA_LABEL, uid, normalize, derive, paraOf, searchMemos, relatedMemos, tagCounts,
+  sharedToMemo, renderMarkdown, escapeHtml, memoToMarkdown, uniqueNames,
   makeZip, markdownToMemo, mergeById, memoTitle, parseCapture, parseTags, isSearchLike, memoKind,
-  previewText, pickResurface, dayLabel, entryOf,
+  previewText, dayLabel, entryOf,
 } from './core.js';
 import { createPalace, assignRooms, placeNew } from './palace.js';
 
@@ -25,7 +25,6 @@ const state = {
   limit: PAGE,
   lastBackup: 0,
   persisted: false,
-  resurfaceSkip: 0,
   roomCells: {},
 };
 
@@ -49,12 +48,6 @@ function dOf(memo) {
 const liveItems = () => state.memos.filter((m) => !m.deletedAt).map((memo) => ({ memo, d: dOf(memo) }));
 const findMemo = (id) => state.memos.find((m) => m.id === id);
 const activeColls = () => Object.values(state.colls).filter((c) => !c.archived);
-
-function titleMap() {
-  const map = new Map();
-  for (const it of liveItems().sort((a, b) => a.memo.updatedAt - b.memo.updatedAt)) map.set(it.d.key, it.memo);
-  return map;
-}
 
 // ── 저장 ──
 
@@ -167,7 +160,6 @@ function renderAll() {
   renderHint();
   renderBanner();
   renderPins();
-  renderToday();
   renderChips();
   renderViewHead();
   renderStream();
@@ -193,30 +185,6 @@ function renderPins() {
     `<button class="pin" data-pin-copy="${memo.id}" title="눌러서 복사">${esc(d.title)}</button>`).join('');
 }
 
-// 오늘 할 것: 다가오는 마감, 받은함 정리, 다시 보기
-function renderToday() {
-  const el = $('#today');
-  if (searching() || state.filter.type !== 'all') { el.innerHTML = ''; return; }
-  const items = liveItems();
-  const rows = [];
-  for (const c of activeColls().filter((c) => c.kind === 'project' && c.deadline)) {
-    const left = daysLeft(c.deadline);
-    if (left !== null && left <= 7) {
-      rows.push(`<button class="today-row" data-filter="coll" data-id="${c.id}"><span>⏰ ${esc(c.name)}</span><b class="${left <= 2 ? 'warn' : ''}">${dday(c.deadline)}</b></button>`);
-    }
-  }
-  const inbox = items.filter((it) => paraOf(it.memo, state.colls) === 'inbox').length;
-  if (inbox >= 3) rows.push(`<button class="today-row" data-triage><span>받은함 ${inbox}개 정리하기</span></button>`);
-  const re = pickResurface(items, Date.now(), state.resurfaceSkip);
-  if (re) {
-    const p = previewText(re.memo.body, 90);
-    rows.push(`<div class="today-row resurface"><button class="link-like" data-show="${re.memo.id}">
-        <span>다시 보기 · <b>${esc(re.d.title)}</b></span>${p ? `<small>${esc(p)}</small>` : ''}</button>
-        <button class="mini" data-next-resurface>다른 것</button></div>`);
-  }
-  el.innerHTML = rows.length ? `<div class="today">${rows.join('')}</div>` : '';
-}
-
 function chip(label, type, id, count, extra = '') {
   const on = state.filter.type === type && (id === undefined || state.filter.id === id) ? ' on' : '';
   return `<button class="chip${on}" data-filter="${type}"${id ? ` data-id="${id}"` : ''}>${label}${count ? ` <small>${count}</small>` : ''}${extra}</button>`;
@@ -232,13 +200,13 @@ function renderChips() {
     if (memo.collectionId) byColl[memo.collectionId] = (byColl[memo.collectionId] || 0) + 1;
   }
   const projects = activeColls().filter((c) => c.kind === 'project')
-    .sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   const areas = activeColls().filter((c) => c.kind === 'area').sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   const trash = state.memos.filter((m) => m.deletedAt).length;
   $('#chips').innerHTML = [
     chip('전체', 'all'),
     chip('받은함', 'inbox', undefined, counts.inbox),
-    ...projects.map((c) => chip(esc(c.name), 'coll', c.id, 0, c.deadline ? ` <small class="${(daysLeft(c.deadline) ?? 99) <= 2 ? 'warn' : ''}">${dday(c.deadline)}</small>` : '')),
+    ...projects.map((c) => chip(esc(c.name), 'coll', c.id, byColl[c.id])),
     ...areas.map((c) => chip(esc(c.name), 'coll', c.id, byColl[c.id])),
     chip('자료', 'resource', undefined, counts.resource),
     chip('보관', 'archive'),
@@ -256,7 +224,6 @@ function renderViewHead() {
     const projects = c.kind === 'area' ? activeColls().filter((p) => p.kind === 'project' && p.areaId === c.id) : [];
     el.innerHTML = `
       <div class="vh-title">${c.kind === 'project' ? '프로젝트' : '영역'} · ${esc(c.name)}
-        ${c.deadline ? `<span class="muted small">${c.deadline} (${dday(c.deadline)})</span>` : ''}
         ${c.archived ? '<span class="badge b-archive">끝남</span>' : ''}</div>
       ${area ? `<div class="muted small">영역: <button class="link-btn" data-filter="coll" data-id="${area.id}">${esc(area.name)}</button></div>` : ''}
       ${projects.length ? `<div class="muted small">이 영역의 프로젝트: ${projects.map((p) => `<button class="link-btn" data-filter="coll" data-id="${p.id}">${esc(p.name)}</button>`).join(' · ')}</div>` : ''}
@@ -365,7 +332,7 @@ function cardBody(memo, d) {
   const firstText = lines.findIndex((l) => l.trim());
   const e = entryOf(memo.body);
   const rest = [e ? e.desc : '', lines.slice(firstText + 1).join('\n')].join('\n').trim();
-  const html = renderMarkdown(rest || memo.body, { hasTitle: (t) => titleMap().has(normalize(t)) });
+  const html = renderMarkdown(rest || memo.body);
   return `<div class="card-body">
       <div class="md">${html}</div>
       ${memo.sourceUrl ? `<a class="source" href="${esc(memo.sourceUrl)}" target="_blank" rel="noopener">출처 ${esc(memo.sourceUrl)}</a>` : ''}
@@ -384,14 +351,10 @@ function cardBody(memo, d) {
 function connections(memo, d) {
   const items = liveItems();
   const self = { memo, d };
-  const back = backlinks(items, self);
-  const related = relatedMemos(items, self, 4).filter((r) => !back.some((b) => b.memo.id === r.memo.id));
+  const related = relatedMemos(items, self, 4);
   const li = (it) => `<button class="conn-item" data-show="${it.memo.id}">${esc(it.d.title)}</button>`;
-  if (!back.length && !related.length) return '';
-  return `<div class="conn">
-    ${back.length ? `<div><span class="muted small">이 메모를 가리키는 메모</span>${back.map(li).join('')}</div>` : ''}
-    ${related.length ? `<div><span class="muted small">태그가 겹치는 메모</span>${related.map(li).join('')}</div>` : ''}
-  </div>`;
+  if (!related.length) return '';
+  return `<div class="conn"><div><span class="muted small">태그가 겹치는 메모</span>${related.map(li).join('')}</div></div>`;
 }
 
 const imageUrls = new Map();
@@ -419,16 +382,12 @@ async function showMemo(id) {
   const idx = byRecent(state.memos.filter(inFilter).map((memo) => ({ memo, d: dOf(memo) })))
     .findIndex((h) => h.memo.id === id);
   if (idx >= state.limit) state.limit = idx + 1;
-  m.seenAt = Date.now();
-  saveMemo(m, false);
   renderAll();
   document.querySelector(`.card[data-id="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
 function toggleCard(id) {
   state.expanded = state.expanded === id ? null : id;
-  const m = findMemo(id);
-  if (m && state.expanded) { m.seenAt = Date.now(); saveMemo(m, false); }
   renderStream();
 }
 
@@ -519,11 +478,10 @@ function renderEditor() {
       <button class="chip-btn" data-done>완료</button>
       <button class="chip-btn place" data-move="${m.id}">위치: ${esc(placeName(m))}</button>
       <span class="spacer"></span>
-      <button class="chip-btn" data-image>이미지</button>
       <button class="chip-btn${m.pinned ? ' on' : ''}" data-pin="${m.id}">${m.pinned ? '고정 풀기' : '고정'}</button>
       <button class="chip-btn danger" data-delete="${m.id}">삭제</button>
     </div>
-    <textarea id="body" class="ed-body" placeholder="첫 줄은 제목&#10;&#10;#태그  [[다른 메모]]  - [ ] 할 일  ==형광펜==">${esc(m.body)}</textarea>
+    <textarea id="body" class="ed-body" placeholder="키워드: 짧은 설명&#10;&#10;#태그  ==형광펜==">${esc(m.body)}</textarea>
     <div id="suggest" class="suggest" hidden></div>
     <label class="ed-source"><span>출처</span><input id="source" type="url" placeholder="출처 링크 (있으면)" value="${esc(m.sourceUrl || '')}" inputmode="url"></label>
     <div id="edConn">${connections(m, d)}</div>
@@ -546,26 +504,17 @@ function onBodyInput(ta) {
   scheduleSave();
 }
 
-// [[링크]] · #태그 자동완성
+// #태그 자동완성
 function updateSuggest(ta) {
   const box = $('#suggest');
   const before = ta.value.slice(0, ta.selectionStart);
-  let m, items = [], kind;
-  if ((m = before.match(/\[\[([^\]\n]*)$/))) {
-    kind = 'link';
-    const q = normalize(m[1]);
-    items = liveItems().filter((it) => it.memo.id !== state.editing && it.d.key.includes(q))
-      .sort((a, b) => b.memo.updatedAt - a.memo.updatedAt).slice(0, 8).map((it) => it.d.title);
-  } else if ((m = before.match(/(?:^|\s)#([\p{L}\p{N}_\-/]+)$/u))) {
-    kind = 'tag';
-    const q = normalize(m[1]);
-    items = tagCounts(liveItems()).map(([t]) => t).filter((t) => normalize(t).startsWith(q) && normalize(t) !== q).slice(0, 8);
-  }
+  const m = before.match(/(?:^|\s)#([\p{L}\p{N}_\-/]+)$/u);
+  const q = m ? normalize(m[1]) : '';
+  const items = m ? tagCounts(liveItems()).map(([t]) => t).filter((t) => normalize(t).startsWith(q) && normalize(t) !== q).slice(0, 8) : [];
   if (!items.length) { box.hidden = true; return; }
   box.hidden = false;
-  box.dataset.kind = kind;
   box.dataset.len = m[1].length;
-  box.innerHTML = items.map((t) => `<button type="button" data-pick="${esc(t)}">${kind === 'tag' ? '#' : ''}${esc(t)}</button>`).join('');
+  box.innerHTML = items.map((t) => `<button type="button" data-pick="${esc(t)}">#${esc(t)}</button>`).join('');
 }
 
 function pickSuggest(value) {
@@ -573,10 +522,8 @@ function pickSuggest(value) {
   const box = $('#suggest');
   const at = ta.selectionStart;
   const len = Number(box.dataset.len);
-  const insert = box.dataset.kind === 'link' ? value + ']]' : value + ' ';
-  let after = ta.value.slice(at);
-  if (box.dataset.kind === 'link' && after.startsWith(']]')) after = after.slice(2);
-  ta.value = ta.value.slice(0, at - len) + insert + after;
+  const insert = value + ' ';
+  ta.value = ta.value.slice(0, at - len) + insert + ta.value.slice(at);
   const pos = at - len + insert.length;
   ta.setSelectionRange(pos, pos);
   ta.focus();
@@ -585,40 +532,7 @@ function pickSuggest(value) {
 }
 
 // ── 이미지 ──
-
-async function compressImage(file) {
-  const MAX = 1600;
-  const bmp = await createImageBitmap(file).catch(() => null);
-  if (!bmp) return { blob: file, type: file.type || 'image/png' };
-  const scale = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bmp.width * scale);
-  canvas.height = Math.round(bmp.height * scale);
-  canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
-  const toBlob = (type, q) => new Promise((r) => canvas.toBlob(r, type, q));
-  let blob = await toBlob('image/webp', 0.82);
-  if (!blob || blob.type !== 'image/webp') blob = await toBlob('image/jpeg', 0.85);
-  if (!blob || blob.size > file.size) return { blob: file, type: file.type || 'image/png' };
-  return { blob, type: blob.type };
-}
-
-async function storeImage(file) {
-  const { blob, type } = await compressImage(file);
-  const id = uid();
-  await db.put('images', { id, blob, type, createdAt: Date.now() });
-  return id;
-}
-
-async function insertImage(file) {
-  const m = findMemo(state.editing);
-  if (!m) return;
-  const id = await storeImage(file);
-  const ta = $('#body');
-  const at = ta.selectionStart ?? ta.value.length;
-  ta.value = ta.value.slice(0, at) + `\n![](img:${id})\n` + ta.value.slice(at);
-  onBodyInput(ta);
-  flushSave();
-}
+// 넣는 버튼·붙여넣기는 뺐음(2026-10-20). 나중에 다시 넣을 수 있게 저장소(images)·보여 주기(fillImages)·백업은 남겨 둠
 
 // ── 메모 동작 ──
 
@@ -700,24 +614,6 @@ async function moveMemo(memo, place) {
   await saveMemo(memo, false);
 }
 
-async function openLink(title) {
-  const m = titleMap().get(normalize(title));
-  if (m) {
-    if ($('#editor').open) return openEditor(m.id);
-    return showMemo(m.id);
-  }
-  if (confirm(`'${title}' 메모가 아직 없어요. 새로 만들까요?`)) {
-    const n = await createMemo({ body: `# ${title}\n\n` });
-    openEditor(n.id);
-  }
-}
-
-async function setTaskLine(memo, line) {
-  memo.body = toggleTask(memo.body, line);
-  await saveMemo(memo);
-  renderStream();
-}
-
 // ── 시트: 옮기기 · 정리하기 · 태그 · 프로젝트/영역 · 설정 ──
 
 function placeButtons(memo) {
@@ -755,51 +651,6 @@ function openMove(memo) {
   });
 }
 
-// 받은함 정리: 한 장씩 보고 한 번 눌러 보내기
-function openTriage() {
-  const queue = liveItems().filter((it) => paraOf(it.memo, state.colls) === 'inbox')
-    .sort((a, b) => a.memo.createdAt - b.memo.createdAt).map((it) => it.memo.id);
-  let i = 0;
-  let done = 0;
-  const show = () => {
-    const memo = findMemo(queue[i]);
-    if (!memo) {
-      openSheet(`<h2>정리 끝</h2><p>${done}개를 옮겼어요.</p><div class="dlg-actions"><button class="primary-btn" data-close>닫기</button></div>`,
-        (s) => { s.onclick = (e) => { if (e.target.closest('[data-close]')) closeLayer(); }; });
-      return;
-    }
-    openSheet(`
-      <div class="triage-top"><h2>받은함 정리</h2><span class="muted small">${i + 1} / ${queue.length}</span></div>
-      <div class="triage-card md">${renderMarkdown(memo.body)}</div>
-      ${memo.sourceUrl ? `<div class="muted small host">출처 ${esc(hostOf(memo.sourceUrl))}</div>` : ''}
-      <input id="triageTags" class="field" placeholder="#태그 더하기 (선택)" autocomplete="off">
-      ${placeButtons(memo)}
-      <div class="dlg-actions">
-        <button class="chip-btn danger" data-trash>버리기</button>
-        <button class="chip-btn" data-edit-now>편집</button>
-        <button class="chip-btn" data-skip>나중에 →</button>
-      </div>`, (s) => {
-      fillImages(s.querySelector('.triage-card'));
-      s.onclick = async (e) => {
-        const b = e.target.closest('button');
-        if (!b) return;
-        const extra = parseTags(s.querySelector('#triageTags').value.replace(/(^|\s)([^#\s])/g, '$1#$2'));
-        const addTags = async () => {
-          const have = new Set(dOf(memo).tags.map(normalize));
-          const add = extra.filter((t) => !have.has(normalize(t)));
-          if (add.length) { memo.body = memo.body.trimEnd() + '\n\n' + add.map((t) => '#' + t).join(' '); await saveMemo(memo); }
-        };
-        if (b.dataset.place) { await addTags(); await moveMemo(memo, b.dataset.place); done++; i++; show(); renderAll(); }
-        else if ('trash' in b.dataset) { memo.deletedAt = Date.now(); await saveMemo(memo, false); done++; i++; show(); renderAll(); }
-        else if ('skip' in b.dataset) { await addTags(); i++; show(); }
-        else if ('editNow' in b.dataset) { await addTags(); closeLayer(() => openEditor(memo.id)); }
-        else if ('newColl' in b.dataset) newCollSheet();
-      };
-    });
-  };
-  show();
-}
-
 function searchFor(text) {
   openPanel(false);
   const ta = $('#omni');
@@ -824,7 +675,7 @@ function newCollSheet() {
 }
 
 function editColl(kind, existing) {
-  const c = existing || { id: uid(), kind, name: '', deadline: '', areaId: '', note: '', archived: false, createdAt: Date.now() };
+  const c = existing || { id: uid(), kind, name: '', areaId: '', note: '', archived: false, createdAt: Date.now() };
   const isProject = c.kind === 'project';
   const areas = activeColls().filter((a) => a.kind === 'area');
   openSheet(`
@@ -832,7 +683,6 @@ function editColl(kind, existing) {
       <h2>${existing ? '고치기' : '새'} ${isProject ? '프로젝트' : '영역'}</h2>
       <label>이름<input class="field" name="name" required value="${esc(c.name)}" autocomplete="off"></label>
       ${isProject ? `
-        <label>마감일<input class="field" name="deadline" type="date" value="${esc(c.deadline || '')}"></label>
         ${areas.length ? `<label>속한 영역<select class="field" name="areaId"><option value="">(없음)</option>
           ${areas.map((a) => `<option value="${a.id}"${a.id === c.areaId ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>` : ''}` : ''}
       <label>설명 (선택)<textarea class="field" name="note" rows="2">${esc(c.note || '')}</textarea></label>
@@ -848,7 +698,7 @@ function editColl(kind, existing) {
       c.name = fd.get('name').trim();
       if (!c.name) return;
       c.note = (fd.get('note') || '').trim();
-      if (isProject) { c.deadline = fd.get('deadline') || ''; c.areaId = fd.get('areaId') || ''; }
+      if (isProject) c.areaId = fd.get('areaId') || '';
       state.colls[c.id] = c;
       await db.put('collections', c);
       closeLayer();
@@ -1004,15 +854,15 @@ async function openSettings() {
         <li>위 칸 하나로 <b>적기와 찾기</b>를 같이 해요. 짧게 적으면 아래에 비슷한 메모가 바로 보여요.</li>
         <li><code>#태그</code> 태그 · <code>+이름</code> 그 프로젝트·영역으로 저장 · <code>!</code> 고정</li>
         <li>찾기: 낱말 여러 개 · <code>#태그</code> · <code>+프로젝트</code> · <code>-빼기</code> · 초성 <code>ㅁㅅ</code></li>
-        <li>본문: <code>[[메모 제목]]</code> 잇기 · <code>==형광펜==</code> 은 목록에 먼저 보임 · <code>- [ ] 할 일</code></li>
-        <li>고정한 메모는 맨 위 줄에 — 누르면 바로 복사 (둘째 줄부터, 링크는 주소)</li>
+        <li>한 줄에 <code>키워드: 짧은 설명</code>. 복사하면 키워드만 · <code>==형광펜==</code> 은 목록에 먼저 보임</li>
+        <li>고정한 메모는 목록 맨 위 줄에 — 누르면 바로 복사</li>
       </ul>
     </section>
     <section>
       <h3>방 (프로젝트 · 영역)</h3>
       <div class="coll-list">${colls.map((c) => `<button class="coll-row" data-edit-coll="${c.id}">
         <span>${esc(c.name)} <small class="muted">${c.kind === 'project' ? '프로젝트' : '영역'}</small>${c.archived ? ' <small class="muted">(끝남)</small>' : ''}</span>
-        <small class="muted">${c.deadline ? dday(c.deadline) : ''} 고치기</small></button>`).join('') || '<p class="muted small">아직 없어요.</p>'}</div>
+        <small class="muted">고치기</small></button>`).join('') || '<p class="muted small">아직 없어요.</p>'}</div>
       <button class="chip-btn" data-new-coll>+ 만들기</button>
     </section>
     <section>
@@ -1095,25 +945,13 @@ function bind() {
     renderHint();
     clearTimeout(t);
     t = setTimeout(() => {
-      state.limit = PAGE; renderPins(); renderToday(); renderStream();
+      state.limit = PAGE; renderPins(); renderStream();
     }, 60);
   });
   omni.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && (!isTouch || e.ctrlKey || e.metaKey)) { e.preventDefault(); saveOmni(); }
     else if (e.key === 'Escape') closePanel();
     else if (e.key === 'ArrowDown' && searching()) { e.preventDefault(); document.querySelector('.card-head')?.focus(); }
-  });
-  omni.addEventListener('paste', async (e) => {
-    const file = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith('image/'));
-    if (!file) return;
-    e.preventDefault();
-    const id = await storeImage(file);
-    const text = omni.value.trim();
-    const m = await createMemo({ body: `${text || '# 붙여넣은 이미지'}\n\n![](img:${id})`, ...filterFields() });
-    clearOmni();
-    state.fresh = m.id;
-    renderAll();
-    toast('이미지를 저장했어요');
   });
   $('#saveBtn').onclick = saveOmni;
   $('#clearBtn').onclick = () => { clearOmni(); renderAll(); omni.focus(); };
@@ -1147,14 +985,8 @@ function bind() {
 
   document.querySelector('.wrap').addEventListener('click', async (e) => {
     const t = e.target;
-    const link = t.closest('.wikilink');
-    if (link) { e.preventDefault(); return openLink(link.dataset.link); }
     const tag = t.closest('a.tag');
     if (tag) { e.preventDefault(); return searchFor('#' + tag.dataset.tag); }
-    if (t.matches('input[type="checkbox"][data-line]')) {
-      const memo = findMemo(t.closest('.card').dataset.id);
-      return setTaskLine(memo, Number(t.dataset.line));
-    }
     const b = t.closest('button, [data-toggle]');
     if (!b) return;
     const ds = b.dataset;
@@ -1181,8 +1013,6 @@ function bind() {
     else if (ds.editColl) editColl(null, state.colls[ds.editColl]);
     else if (ds.archiveColl) archiveColl(state.colls[ds.archiveColl]);
     else if (ds.delColl) deleteColl(state.colls[ds.delColl]);
-    else if ('triage' in ds) openTriage();
-    else if ('nextResurface' in ds) { state.resurfaceSkip++; renderToday(); }
     else if ('backup' in ds) exportJson();
     else if ('more' in ds) { state.limit += PAGE; renderStream(); }
     else if ('emptyTrash' in ds) {
@@ -1211,7 +1041,6 @@ function bind() {
     const m = findMemo(state.editing);
     if ('done' in ds) closeLayer();
     else if (ds.move) { flushSave(); openMove(m); }
-    else if ('image' in ds) $('#imageInput').click();
     else if (ds.pin) togglePin(m);
     else if (ds.delete) { flushSave(); trashMemo(m); }
     else if (ds.pick) pickSuggest(ds.pick);
@@ -1221,18 +1050,6 @@ function bind() {
   ed.addEventListener('input', (e) => {
     if (e.target.id === 'body') { onBodyInput(e.target); updateSuggest(e.target); }
     else if (e.target.id === 'source') { findMemo(state.editing).sourceUrl = e.target.value.trim(); scheduleSave(); }
-  });
-  ed.addEventListener('paste', async (e) => {
-    if (e.target.id !== 'body') return;
-    const file = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith('image/'));
-    if (!file) return;
-    e.preventDefault();
-    await insertImage(file);
-  });
-  $('#imageInput').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    e.target.value = '';
-    if (file) await insertImage(file);
   });
   $('#importInput').addEventListener('change', async (e) => {
     const files = [...e.target.files];
