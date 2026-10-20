@@ -28,26 +28,24 @@
           <button id="saveBtn" class="text-btn strong" type="button" disabled>저장</button>
         </div>
       </section>
-      <nav class="panel-nav" aria-label="보기">
-        <button class="text-btn" type="button" data-mode="list" aria-pressed="true">목록</button>
-        <button class="text-btn" type="button" data-mode="maze" aria-pressed="false">궁전</button>
+      <nav class="panel-nav">
         <span class="spacer"></span>
         <button id="moreBtn" class="text-btn" type="button">태그 · 설정</button>
       </nav>
     </div>
+    <div class="wrap">
+      <div id="banner"></div>
+      <div id="pins" class="pins"></div>
+      <div id="today"></div>
+      <nav id="chips" class="chips" aria-label="모아보기"></nav>
+      <div id="viewHead" class="view-head"></div>
+      <div id="stream" class="stream"></div>
+    </div>
   </div>
 
-  <div class="wrap">
-    <div id="banner"></div>
-    <div id="pins" class="pins"></div>
-    <div id="today"></div>
-    <nav id="chips" class="chips" aria-label="모아보기"></nav>
-    <div id="viewHead" class="view-head"></div>
-    <div id="stream" class="stream"></div>
-    <section id="maze" class="maze" hidden></section>
-  </div>
+  <main id="palace" class="palace" aria-label="궁전: 키워드 지도"></main>
 
-  <button id="fab" class="fab" type="button" aria-label="메뉴: 적기·찾기 · 보기 바꾸기 · 태그 · 설정"><span></span><span></span><span></span></button>
+  <button id="fab" class="fab" type="button" aria-label="메뉴: 적기·찾기 · 목록 · 태그 · 설정"><span></span><span></span><span></span></button>
 
   <dialog id="editor" class="editor"></dialog>
   <dialog id="sheet" class="sheet"></dialog>

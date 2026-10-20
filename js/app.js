@@ -5,7 +5,7 @@ import {
   makeZip, markdownToMemo, mergeById, memoTitle, parseCapture, parseTags, isSearchLike, memoKind,
   previewText, pickResurface, dayLabel, entryOf,
 } from './core.js';
-import { createMaze } from './maze.js';
+import { createPalace, assignRooms, placeNew } from './palace.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = escapeHtml;
@@ -26,9 +26,7 @@ const state = {
   lastBackup: 0,
   persisted: false,
   resurfaceSkip: 0,
-  // list(목록) | maze(궁전). 예전 설정 'palace'·'palaceOn'도 궁전으로
-  mode: ['palace', 'maze'].includes(readPref('viewMode')) || readPref('palaceOn') === '1' ? 'maze' : 'list',
-  mazeRoom: 'inbox',
+  roomCells: {},
 };
 
 function readPref(key) {
@@ -116,7 +114,7 @@ async function saveOmni() {
   closePanel();
   const same = liveItems().find((it) => it.memo.body.trim() === cap.body);
   if (same) {
-    if (state.mode === 'list') showMemo(same.memo.id); else openEditor(same.memo.id);
+    openEditor(same.memo.id);
     toast('이미 있는 메모예요');
     return;
   }
@@ -143,7 +141,6 @@ function growOmni() {
   const ta = $('#omni');
   ta.style.height = 'auto';
   ta.style.height = Math.min(ta.scrollHeight, innerHeight * 0.4) + 'px';
-  panelSpace();
 }
 
 function renderHint() {
@@ -166,7 +163,7 @@ function renderHint() {
 // ── 화면 그리기 ──
 
 function renderAll() {
-  if (state.mode === 'maze') { renderHint(); renderMaze(); return; }
+  renderPalace();
   renderHint();
   renderBanner();
   renderPins();
@@ -376,6 +373,7 @@ function cardBody(memo, d) {
       <div class="card-actions">
         <button class="act" data-edit="${memo.id}">편집</button>
         <button class="act" data-move="${memo.id}">옮기기</button>
+        <button class="act" data-map="${memo.id}">지도에서</button>
         <button class="act${memo.pinned ? ' on' : ''}" data-pin="${memo.id}">${memo.pinned ? '고정 풀기' : '고정'}</button>
         <button class="act" data-share="${memo.id}">보내기</button>
         <button class="act danger" data-delete="${memo.id}">삭제</button>
@@ -640,7 +638,7 @@ async function copyMemo(memo, withOpen = false, text = copyText(memo)) {
     memo.usedAt = Date.now();
     saveMemo(memo, false);
     const actions = [{ label: '검색', fn: () => webSearch(text) }];
-    if (withOpen) actions.push({ label: '열기', fn: () => (state.mode !== 'list' ? openEditor(memo.id) : showMemo(memo.id)) });
+    if (withOpen) actions.push({ label: '열기', fn: () => ($('#panel').hidden ? openEditor(memo.id) : showMemo(memo.id)) });
     toast(`‘${text.length > 16 ? text.slice(0, 16) + '…' : text}’ 복사했어요`, actions);
   } catch {
     toast('복사하지 못했어요. 메모를 펼쳐 직접 선택해 주세요.');
@@ -993,10 +991,8 @@ async function openSettings() {
   const bookmarklet = `javascript:(()=>{const s=String(getSelection());window.open(${JSON.stringify(appUrl)}+'?title='+encodeURIComponent(document.title)+'&url='+encodeURIComponent(location.href)+'&text='+encodeURIComponent(s))})()`;
   const colls = Object.values(state.colls).sort((a, b) => (a.archived - b.archived) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, 'ko'));
   const tags = tagCounts(liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive'));
-  const modes = [['list', '목록'], ['maze', '궁전']];
   openSheet(`
-    <nav class="menu-views">${modes.map(([m, label]) =>
-      `<button class="menu-view" data-mode="${m}" aria-pressed="${state.mode === m}">${label}</button>`).join('')}</nav>
+    <h2>태그 · 설정</h2>
     <section>
       <h3>태그</h3>
       ${tags.length ? `<div class="tag-cloud">${tags.slice(0, 40).map(([t, n]) => `<button class="tag-chip" data-tag="${esc(t)}">#${esc(t)} <small>${n}</small></button>`).join('')}</div>`
@@ -1041,8 +1037,7 @@ async function openSettings() {
       const b = e.target.closest('button');
       if (!b) return;
       const act = b.dataset.act;
-      if (b.dataset.mode) closeLayer(() => setMode(b.dataset.mode));
-      else if (b.dataset.tag) closeLayer(() => { if (state.mode !== 'list') setMode('list'); searchFor('#' + b.dataset.tag); });
+      if (b.dataset.tag) closeLayer(() => searchFor('#' + b.dataset.tag));
       else if (act === 'json') exportJson();
       else if (act === 'md') exportMarkdown();
       else if (act === 'import') $('#importInput').click();
@@ -1095,7 +1090,6 @@ function bind() {
     renderHint();
     clearTimeout(t);
     t = setTimeout(() => {
-      if (state.mode === 'maze') return highlightMaze();
       state.limit = PAGE; renderPins(); renderToday(); renderStream();
     }, 60);
   });
@@ -1143,10 +1137,8 @@ function bind() {
   $('#panel').addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.mode) setMode(b.dataset.mode);
-    else if (b.id === 'moreBtn') openSettings();
+    if (b.id === 'moreBtn') openSettings();
   });
-  addEventListener('resize', panelSpace);
 
   document.querySelector('.wrap').addEventListener('click', async (e) => {
     const t = e.target;
@@ -1168,6 +1160,7 @@ function bind() {
     else if (ds.toggle) toggleCard(ds.toggle);
     else if (ds.edit) openEditor(ds.edit);
     else if (ds.move) openMove(memo(ds.move));
+    else if (ds.map) showOnMap(ds.map);
     else if (ds.pin) togglePin(memo(ds.pin));
     else if (ds.share) shareMemo(memo(ds.share));
     else if (ds.delete) trashMemo(memo(ds.delete));
@@ -1273,7 +1266,7 @@ function roomList(items) {
   ].map((r) => ({ ...r, count: count[r.key] || 0 }));
 }
 
-function copyFromRoom(id) {
+function copyFromMap(id) {
   const m = findMemo(id);
   if (m) copyMemo(m, true);
 }
@@ -1294,9 +1287,9 @@ function openPanel(focus = true) {
   if (panel.hidden) {
     panel.hidden = false;
     document.body.classList.add('panel-open');
+    palace?.highlight(null);
     openLayer(panelLayer, () => { clearOmni(); renderAll(); });
     renderHint();
-    panelSpace();
   }
   // 누른 그 순간에 커서를 넣어야 폰 자판이 바로 올라옴
   if (focus) $('#omni').focus();
@@ -1306,48 +1299,56 @@ function closePanel() {
   if (!$('#panel').hidden && layers.at(-1)?.dlg === panelLayer) closeLayer();
 }
 
-// 입력칸이 덮는 만큼 목록을 내림
-function panelSpace() {
-  const panel = $('#panel');
-  document.body.style.setProperty('--panel-h', panel.hidden ? '0px' : panel.offsetHeight + 'px');
-}
+// ── 궁전 = 글자 지도 (메인 화면) ──
 
-function setMode(mode) {
-  state.mode = mode;
-  writePref('viewMode', mode);
-  document.body.classList.toggle('canvas-on', mode !== 'list');
-  $('#maze').hidden = mode !== 'maze';
-  document.querySelectorAll('#panel [data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
-  if (mode !== 'list') scrollTo({ top: 0 });
-  renderAll();
-}
+let palace = null;
 
-// ── 궁전 (3D 미궁, 방 하나씩) ──
-
-let maze = null;
-
-function renderMaze() {
-  if (!maze) maze = createMaze($('#maze'), { onTap: copyFromRoom, onRoom: (key) => { state.mazeRoom = key; renderMaze(); } });
-  const live = liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive');
-  const all = live.map((it) => ({ id: it.memo.id, room: roomKeyOf(it.memo) }));
-  const rooms = roomList(all).map(({ key, label, count }) => ({ key, label: `${label} ${count}` }));
-  if (!rooms.some((r) => r.key === state.mazeRoom)) state.mazeRoom = 'inbox';
-  // 벽 자리는 저장한 순서대로 (새 키워드는 뒤에 붙어서 있던 자리가 안 바뀜)
-  const items = live.filter((it) => roomKeyOf(it.memo) === state.mazeRoom)
-    .sort((a, b) => a.memo.createdAt - b.memo.createdAt)
+async function renderPalace() {
+  if (!palace) palace = createPalace($('#palace'), { onTap: copyFromMap, onMove: moveOnMap });
+  const items = liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive')
     .map((it) => {
       const e = entryOf(it.memo.body);
-      return { id: it.memo.id, keyword: it.d.title, desc: e ? e.desc : previewText(it.memo.body, 30), strong: (it.memo.useCount || 0) >= 3 };
+      return {
+        id: it.memo.id, room: roomKeyOf(it.memo), keyword: it.d.title,
+        desc: e ? e.desc : previewText(it.memo.body, 40), strong: (it.memo.useCount || 0) >= 3, pinned: it.memo.pinned,
+      };
     });
-  maze.render({ rooms, room: state.mazeRoom, items });
-  highlightMaze();
+  const rooms = roomList(items).map((r) => ({ ...r, kind: r.key === 'inbox' || r.key === 'resource' ? r.key : state.colls[r.key].kind }));
+  // 방 자리: 한 번 정하면 그대로
+  const cells = assignRooms(rooms.map((r) => r.key), state.roomCells);
+  if (rooms.some((r) => !state.roomCells[r.key])) {
+    state.roomCells = { ...state.roomCells, ...cells };
+    db.setMeta('palaceRooms', state.roomCells);
+  }
+  // 키워드 자리: 처음 보는 것만 빈 칸에
+  const positions = Object.fromEntries(state.memos.filter((m) => m.pos).map((m) => [m.id, m.pos]));
+  const fresh = placeNew(items, positions);
+  const changed = [];
+  for (const [id, pos] of Object.entries(fresh)) {
+    const m = findMemo(id);
+    m.pos = pos;
+    positions[id] = pos;
+    changed.push(m);
+  }
+  if (changed.length) db.putMany('memos', changed);
+  palace.render({ rooms, items, positions, roomCells: cells });
 }
 
-function highlightMaze() {
-  if (!maze) return;
-  if (!searching()) return maze.highlight(null);
-  const items = liveItems().filter((it) => roomKeyOf(it.memo) === state.mazeRoom && paraOf(it.memo, state.colls) !== 'archive');
-  maze.highlight(searchMemos(items, state.input, state.colls).map((h) => h.memo.id));
+// 끌어서 다른 방에 넣으면 그 방(PARA 위치)으로 옮김
+async function moveOnMap(id, roomKey, pos) {
+  const m = findMemo(id);
+  if (!m || !roomKey) return renderPalace();
+  const moved = roomKey !== roomKeyOf(m);
+  m.pos = pos;
+  if (moved) await moveMemo(m, roomKey === 'inbox' || roomKey === 'resource' ? roomKey : 'c:' + roomKey);
+  else await saveMemo(m, false);
+  renderPalace();
+  if (moved) toast(`${placeName(m)}(으)로 옮겼어요`);
+}
+
+// 목록에서 고른 메모를 지도에서 보여 줌
+function showOnMap(id) {
+  closeLayer(() => palace?.highlight([id]));
 }
 
 // ── 시작 ──
@@ -1356,6 +1357,7 @@ async function start() {
   const [memos, colls] = await Promise.all([db.all('memos'), db.all('collections')]);
   state.colls = Object.fromEntries(colls.map((c) => [c.id, c]));
   state.lastBackup = await db.getMeta('lastBackup', 0);
+  state.roomCells = await db.getMeta('palaceRooms', {});
   state.persisted = await navigator.storage?.persisted?.().catch(() => false);
   state.memos = memos;
   const old = memos.filter((m) => m.deletedAt && Date.now() - m.deletedAt > TRASH_DAYS * DAY);
@@ -1364,7 +1366,7 @@ async function start() {
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 
   bind();
-  setMode(state.mode);
+  renderAll();
   await takeShared();
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
