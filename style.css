@@ -233,7 +233,7 @@ dialog::backdrop { background: rgb(0 0 0 / 28%); }
 .toast .link-btn { color: var(--bg); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; margin-left: 12px; min-height: 0; }
 
 
-/* ── 궁전 = 글자 지도 (메인 화면 전체) ── */
+/* ── 호기심의 방 = 글자 지도 (메인 화면 전체). 진열장·선반도 글자와 가는 선뿐 ── */
 html, body { overflow: hidden; height: 100%; }
 .palace { position: fixed; inset: 0; overflow: hidden; }
 .pal-view { position: absolute; inset: 0; touch-action: none; cursor: grab; outline: none; }
@@ -244,6 +244,12 @@ html, body { overflow: hidden; height: 100%; }
 .room.drop { background: color-mix(in srgb, var(--mark) 45%, transparent); }
 .room-name { margin: 0; padding: 16px; font-size: 40px; font-weight: 800; letter-spacing: -0.02em; pointer-events: none; color: var(--faint); transition: font-size 0.2s, color 0.2s; }
 .room-name small { font-size: 16px; font-weight: 500; margin-left: 4px; }
+/* 이름판: 진열장 윗선 아래 이름. 미분류 상자는 선 없이 기울인 글자만 */
+.room:not(.room-inbox) .room-name { border-top: 1px solid var(--faint); margin: 0 16px; padding: 12px 0 16px; }
+.room-inbox .room-name { font-style: italic; }
+/* 선반: 가는 가로선. 표본은 선 바로 위에 올라앉음 */
+.shelf { position: absolute; left: 16px; right: 16px; height: 0; border-top: 1px solid var(--line); pointer-events: none; }
+.pal-canvas.far .shelf, .pal-canvas.far .room-name { border-color: transparent; }
 .room-name .dday { font-size: 16px; color: var(--warn); font-weight: 600; }
 .kw {
   position: absolute; max-width: 168px; display: flex; flex-direction: column; align-items: flex-start;
@@ -272,6 +278,12 @@ html, body { overflow: hidden; height: 100%; }
   font-size: 0.92rem; color: var(--muted); background: var(--bg); padding: 2px 6px;
 }
 .pal-tools .text-btn { min-width: 20px; justify-content: center; }
+/* 산책: 왼쪽 아래 글자 줄 (어느 진열장 · 몇 번째, 다음, 그만) */
+.stroll {
+  position: absolute; left: 20px; bottom: calc(26px + env(safe-area-inset-bottom)); display: flex; gap: 16px; align-items: center;
+  font-size: 0.92rem; background: var(--bg); padding: 2px 6px;
+}
+.stroll .strong { color: var(--text); }
 
 /* 폰 */
 @media (max-width: 640px) {

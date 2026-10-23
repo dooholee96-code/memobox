@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assignRooms, placeNew, freeSlot } from '../js/palace.js';
+import { assignRooms, placeNew, freeSlot, shelfLines, pickStroll, MIN_SHELVES } from '../js/palace.js';
 
 test('방 자리: 이미 정한 방은 그대로, 새 방은 빈 칸에', () => {
   const first = assignRooms(['inbox', 'resource', 'a1']);
@@ -39,4 +39,31 @@ test('빈 칸 찾기: 겹치지 않게 옆·아래로', () => {
   assert.ok(c.x > b.x);
   const d = freeSlot([a, b, c]);
   assert.ok(d.y > a.y);
+});
+
+test('선반 선: 빈 진열장도 최소 줄 수, 표본이 있는 줄까지 늘어남', () => {
+  const base = shelfLines([]);
+  assert.equal(base.length, MIN_SHELVES);
+  assert.ok(base[0] > 84 && base[1] - base[0] === 46);
+  // 다섯째 줄(y = 84 + 4*46)에 표본이 있으면 선반 5줄
+  const more = shelfLines([{ x: 16, y: 84 + 4 * 46 }]);
+  assert.equal(more.length, 5);
+});
+
+test('산책: 오래 안 만난 표본부터, 같은 산책에서 본 것은 다시 안 고름', () => {
+  const items = [
+    { id: 'a', room: 'r1', metAt: 300 },
+    { id: 'b', room: 'r1', metAt: 0 },
+    { id: 'c', room: 'r2', metAt: 100 },
+    { id: 'd', room: 'r2', metAt: 200 },
+  ];
+  const first = () => 0; // 항상 가장 오래된 것
+  assert.equal(pickStroll(items, [], first).id, 'b');
+  // b를 본 뒤에는 b를 빼고, 가능하면 다른 진열장(r2)에서
+  assert.equal(pickStroll(items, ['b'], first).id, 'c');
+  assert.equal(pickStroll(items, ['b', 'c'], first).id, 'a');
+  // 다 보고 나면 처음부터 다시 (직전 것만 피함)
+  const again = pickStroll(items, ['b', 'c', 'a', 'd'], first);
+  assert.ok(again && again.id !== 'd');
+  assert.equal(pickStroll([], []), null);
 });
