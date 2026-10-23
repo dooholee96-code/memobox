@@ -1,6 +1,8 @@
-// 궁전 = 글자 지도: 큰 종이 한 장에 방(입구·자료·영역·프로젝트)과 키워드를 글자로 놓는다.
-// 멀리서는 방 이름만, 다가가면 키워드, 더 다가가면 설명까지 (확대 단계마다 보이는 글자가 다름).
-// 끌어서 이동, 두 손가락·휠로 확대. 키워드 자리는 한 번 정하면 앱이 다시 섞지 않는다.
+// 호기심의 방(cabinet of curiosities) = 글자 지도.
+// 큰 종이 한 장에 진열장(자료·영역·프로젝트)과 미분류 상자(받은함)가 놓이고, 선반 위에 표본(키워드)이 글자로 놓인다.
+// 멀리서는 진열장 이름판만, 다가가면 표본 이름, 더 다가가면 이름표(설명)까지 (확대 단계마다 보이는 글자가 다름).
+// 끌어서 이동, 두 손가락·휠로 확대. 표본 자리는 한 번 정하면 앱이 다시 섞지 않는다(장소법).
+// 선반·이름판도 글자와 가는 선뿐이다(화면은 글자만 규칙).
 
 import { escapeHtml as esc } from './core.js';
 
@@ -13,6 +15,36 @@ const SLOT_H = 46;
 const SLOT_TOP = 84;
 const SLOT_COLS = 3;
 const SLOT_ROWS = Math.floor((ROOM_H - SLOT_TOP - 16) / SLOT_H);
+export const MIN_SHELVES = 3; // 빈 진열장도 선반 몇 칸은 보이게
+
+// 선반 선의 y 자리(진열장 안 좌표). 표본이 있는 줄까지, 최소 MIN_SHELVES줄
+export function shelfLines(positions, min = MIN_SHELVES) {
+  let rows = min;
+  for (const p of positions) rows = Math.max(rows, Math.floor((p.y - SLOT_TOP) / SLOT_H) + 1);
+  rows = Math.min(rows, SLOT_ROWS);
+  return Array.from({ length: rows }, (_, i) => SLOT_TOP + (i + 1) * SLOT_H - 6);
+}
+
+// 산책: 오래 안 만난 표본부터 다시 보여 준다 (나중에 다시 보기).
+// items: [{id, room, metAt}] (metAt = 마지막으로 보거나 복사한 때, 없으면 0)
+// recent: 이번 산책에서 이미 본 id들. 가능하면 직전과 다른 진열장에서 고른다.
+// rng: 0~1 난수 (테스트에서 고정). 가장 오래된 쪽 20%(최소 3개) 안에서 고른다.
+export function pickStroll(items, recent = [], rng = Math.random) {
+  const seen = new Set(recent);
+  let pool = items.filter((it) => !seen.has(it.id));
+  if (!pool.length) {
+    if (!items.length) return null;
+    pool = items.filter((it) => it.id !== recent.at(-1));
+    if (!pool.length) pool = items;
+  }
+  pool = [...pool].sort((a, b) => (a.metAt || 0) - (b.metAt || 0));
+  const n = Math.max(3, Math.ceil(pool.length * 0.2));
+  let head = pool.slice(0, n);
+  const lastRoom = items.find((it) => it.id === recent.at(-1))?.room;
+  const other = head.filter((it) => it.room !== lastRoom);
+  if (other.length && lastRoom) head = other;
+  return head[Math.min(head.length - 1, Math.floor(rng() * head.length))];
+}
 
 // ── 자리 정하기 (순수 함수, 테스트 대상) ──
 
@@ -74,12 +106,18 @@ export function placeNew(items, positions) {
 
 export function createPalace(root, hooks) {
   root.innerHTML = `
-    <div class="pal-view" tabindex="0" aria-label="궁전 보기"><div class="pal-canvas"></div></div>
-    <p class="pal-empty" hidden>오른쪽 아래 버튼을 눌러 첫 키워드를 적어 보세요<br><small>키워드: 짧은 설명</small></p>
+    <div class="pal-view" tabindex="0" aria-label="호기심의 방"><div class="pal-canvas"></div></div>
+    <p class="pal-empty" hidden>오른쪽 아래 버튼을 눌러 첫 표본을 적어 보세요<br><small>키워드: 짧은 설명</small></p>
     <div class="pal-tools">
       <button class="text-btn" data-pal="fit">전체</button>
       <button class="text-btn" data-pal="in" aria-label="확대">+</button>
       <button class="text-btn" data-pal="out" aria-label="축소">−</button>
+      <button class="text-btn" data-pal="stroll">산책</button>
+    </div>
+    <div class="stroll" hidden>
+      <span class="stroll-where muted"></span>
+      <button class="text-btn strong" data-pal="next">다음</button>
+      <button class="text-btn" data-pal="stop">그만</button>
     </div>`;
   const view = root.querySelector('.pal-view');
   const canvas = root.querySelector('.pal-canvas');
@@ -151,10 +189,19 @@ export function createPalace(root, hooks) {
       const p = data.positions[it.id];
       if (p && p.room === it.room) used[it.room] = Math.max(used[it.room] || 120, p.y + 44);
     }
+    for (const r of rooms) if (r.kind !== 'inbox') used[r.key] = Math.max(used[r.key] || 0, SLOT_TOP + MIN_SHELVES * SLOT_H + 8);
+    const posByRoom = {};
+    for (const it of data.items) {
+      const p = data.positions[it.id];
+      if (p && p.room === it.room) (posByRoom[it.room] ||= []).push(p);
+    }
     canvas.innerHTML = rooms.map((r) => {
       const o = layout[r.key];
+      // 받은함은 선반 없는 '미분류 상자', 나머지는 이름판 + 선반이 있는 진열장
+      const shelves = r.kind === 'inbox' ? '' : shelfLines(posByRoom[r.key] || [])
+        .map((y) => `<i class="shelf" style="top:${y}px"></i>`).join('');
       return `<section class="room room-${r.kind}" data-room="${r.key}" style="left:${o.x}px;top:${o.y}px;width:${ROOM_W}px;height:${ROOM_H}px">
-        <h3 class="room-name">${r.label} <small>${r.count}</small></h3></section>`;
+        <h3 class="room-name">${r.label} <small>${r.count}</small></h3>${shelves}</section>`;
     }).join('') + data.items.map((it) => {
       const p = data.positions[it.id];
       const o = layout[it.room];
@@ -163,7 +210,7 @@ export function createPalace(root, hooks) {
         style="left:${o.x + p.x}px;top:${o.y + p.y}px" title="${esc(it.keyword)}${it.desc ? ' — ' + esc(it.desc) : ''}">
         <b>${esc(it.keyword)}</b>${it.desc ? `<small>${esc(it.desc)}</small>` : ''}</button>`;
     }).join('');
-    // 처음 열 때: 넓은 화면은 전체, 폰은 입구 방에 맞춤 (전체는 글자가 너무 작아짐)
+    // 처음 열 때는 방 전체
     root.querySelector('.pal-empty').hidden = data.items.length > 0;
     // 처음엔 지도 전체 (멀리서 방 이름이 보이는 단계)
     if (!hasView) { hasView = true; requestAnimationFrame(() => fitAll(false)); } else apply();
@@ -171,6 +218,7 @@ export function createPalace(root, hooks) {
 
   // 찾는 말에 맞는 키워드만 밝히고 그쪽으로 날아감
   function highlight(ids) {
+    if (!ids && strollBar && !strollBar.hidden) { strollBar.hidden = true; root.querySelector('.pal-tools').hidden = false; }
     const set = ids ? new Set(ids) : null;
     canvas.classList.toggle('searching', !!set);
     const hits = [];
@@ -180,6 +228,33 @@ export function createPalace(root, hooks) {
       if (on) hits.push({ x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight });
     });
     if (hits.length && hits.length <= 30) flyTo(bounds(hits), 1.4);
+  }
+
+  // 산책: 표본 하나로 다가가 이름표까지 보여 줌
+  const strollBar = root.querySelector('.stroll');
+  function showSpecimen(id, where = '') {
+    const el = canvas.querySelector(`.kw[data-kw="${CSS.escape(id)}"]`);
+    if (!el) return false;
+    canvas.classList.add('searching');
+    canvas.querySelectorAll('.kw.hit').forEach((k) => k.classList.remove('hit'));
+    el.classList.add('hit');
+    const r = { x: el.offsetLeft - 40, y: el.offsetTop - 60, w: el.offsetWidth + 80, h: el.offsetHeight + 120 };
+    // 설명(near)이 보이는 배율로 다가감
+    const vw = view.clientWidth, vh = view.clientHeight;
+    const k = Math.min(1.8, Math.max(1.1, Math.min(vw / (r.w + 48), vh / (r.h + 48))));
+    t = { k, x: vw / 2 - (r.x + r.w / 2) * k, y: vh / 2 - (r.y + r.h / 2) * k };
+    apply(true);
+    strollBar.hidden = false;
+    strollBar.querySelector('.stroll-where').textContent = where;
+    root.querySelector('.pal-tools').hidden = true;
+    return true;
+  }
+  function endStroll(refit = true) {
+    if (strollBar.hidden) return;
+    strollBar.hidden = true;
+    root.querySelector('.pal-tools').hidden = false;
+    highlight(null);
+    if (refit) fitAll();
   }
 
   function focusRoom(key, animate = true) {
@@ -306,8 +381,17 @@ export function createPalace(root, hooks) {
     if (!b) return;
     const c = { x: view.clientWidth / 2, y: view.clientHeight / 2 };
     if (b.dataset.pal === 'fit') fitAll();
+    else if (b.dataset.pal === 'stroll') hooks.onStroll?.();
     else canvas.classList.add('anim'), zoomAt(c.x, c.y, b.dataset.pal === 'in' ? 1.4 : 1 / 1.4);
   });
+  strollBar.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pal]');
+    if (!b) return;
+    if (b.dataset.pal === 'next') hooks.onStroll?.();
+    else if (b.dataset.pal === 'stop') endStroll();
+  });
+  // 산책 중에 직접 끌거나 확대하면 산책 표시는 남고, 다른 곳을 찾으면 끝남
+  view.addEventListener('keydown', (e) => { if (e.key === 'Escape') endStroll(); });
 
-  return { render, highlight, focusRoom, fitAll };
+  return { render, highlight, focusRoom, fitAll, showSpecimen, endStroll, get strolling() { return !strollBar.hidden; } };
 }

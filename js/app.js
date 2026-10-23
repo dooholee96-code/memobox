@@ -5,7 +5,7 @@ import {
   makeZip, markdownToMemo, mergeById, memoTitle, parseCapture, parseTags, isSearchLike, memoKind,
   previewText, dayLabel, entryOf,
 } from './core.js';
-import { createPalace, assignRooms, placeNew } from './palace.js';
+import { createPalace, assignRooms, placeNew, pickStroll } from './palace.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = escapeHtml;
@@ -340,7 +340,7 @@ function cardBody(memo, d) {
       <div class="card-actions">
         <button class="act" data-edit="${memo.id}">편집</button>
         <button class="act" data-move="${memo.id}">옮기기</button>
-        <button class="act" data-map="${memo.id}">지도에서</button>
+        <button class="act" data-map="${memo.id}">진열장에서</button>
         <button class="act${memo.pinned ? ' on' : ''}" data-pin="${memo.id}">${memo.pinned ? '고정 풀기' : '고정'}</button>
         <button class="act" data-share="${memo.id}">보내기</button>
         <button class="act danger" data-delete="${memo.id}">삭제</button>
@@ -859,7 +859,7 @@ async function openSettings() {
       </ul>
     </section>
     <section>
-      <h3>방 (프로젝트 · 영역)</h3>
+      <h3>진열장 (프로젝트 · 영역)</h3>
       <div class="coll-list">${colls.map((c) => `<button class="coll-row" data-edit-coll="${c.id}">
         <span>${esc(c.name)} <small class="muted">${c.kind === 'project' ? '프로젝트' : '영역'}</small>${c.archived ? ' <small class="muted">(끝남)</small>' : ''}</span>
         <small class="muted">고치기</small></button>`).join('') || '<p class="muted small">아직 없어요.</p>'}</div>
@@ -1067,7 +1067,7 @@ function bind() {
   });
 }
 
-// ── 방 (궁전에서 씀) ──
+// ── 진열장 (호기심의 방에서 씀) ──
 
 function roomKeyOf(memo) {
   const c = memo.collectionId && state.colls[memo.collectionId];
@@ -1081,7 +1081,7 @@ function roomList(items) {
   const colls = activeColls();
   const byName = (a, b) => a.name.localeCompare(b.name, 'ko');
   return [
-    { key: 'inbox', label: '입구' },
+    { key: 'inbox', label: '미분류 상자' },
     { key: 'resource', label: '자료' },
     ...colls.filter((c) => c.kind === 'area').sort(byName).map((c) => ({ key: c.id, label: esc(c.name) })),
     ...colls.filter((c) => c.kind === 'project').sort(byName).map((c) => ({ key: c.id, label: esc(c.name) })),
@@ -1121,18 +1121,19 @@ function closePanel() {
   if (!$('#panel').hidden && layers.at(-1)?.dlg === panelLayer) closeLayer();
 }
 
-// ── 궁전 = 글자 지도 (메인 화면) ──
+// ── 호기심의 방 = 글자 지도 (메인 화면) ──
 
 let palace = null;
 
 async function renderPalace() {
-  if (!palace) palace = createPalace($('#palace'), { onTap: copyFromMap, onMove: moveOnMap });
+  if (!palace) palace = createPalace($('#palace'), { onTap: copyFromMap, onMove: moveOnMap, onStroll: stroll });
   const items = liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive')
     .map((it) => {
       const e = entryOf(it.memo.body);
       return {
         id: it.memo.id, room: roomKeyOf(it.memo), keyword: it.d.title,
         desc: e ? e.desc : previewText(it.memo.body, 40), strong: (it.memo.useCount || 0) >= 3, pinned: it.memo.pinned,
+        metAt: Math.max(it.memo.seenAt || 0, it.memo.usedAt || 0),
       };
     });
   const rooms = roomList(items).map((r) => ({ ...r, kind: r.key === 'inbox' || r.key === 'resource' ? r.key : state.colls[r.key].kind }));
@@ -1154,6 +1155,26 @@ async function renderPalace() {
   }
   if (changed.length) db.putMany('memos', changed);
   palace.render({ rooms, items, positions, roomCells: cells });
+}
+
+// 산책 = 나중에 다시 보기. 오래 안 만난 표본부터 하나씩 다가가 보여 준다.
+// 본 표본은 seenAt만 찍는다(updatedAt은 안 건드림). 복사(usedAt)도 '만난 것'으로 침
+let strollSeen = [];
+
+async function stroll() {
+  const items = liveItems().filter((it) => paraOf(it.memo, state.colls) !== 'archive').map((it) => ({
+    id: it.memo.id, room: roomKeyOf(it.memo), metAt: Math.max(it.memo.seenAt || 0, it.memo.usedAt || 0),
+  }));
+  if (!items.length) return toast('아직 표본이 없어요');
+  if (!palace.strolling) strollSeen = [];
+  const pick = pickStroll(items, strollSeen);
+  if (!pick) return;
+  strollSeen.push(pick.id);
+  const m = findMemo(pick.id);
+  const where = roomList(items).find((r) => r.key === pick.room)?.label || '';
+  if (!palace.showSpecimen(pick.id, `${where} · ${strollSeen.length}`)) return;
+  m.seenAt = Date.now();
+  await saveMemo(m, false);
 }
 
 // 끌어서 다른 방에 넣으면 그 방(PARA 위치)으로 옮김
